@@ -7,9 +7,18 @@ import dotenv from "dotenv";
 import { GeminiClient } from "./Models/GeminiClient";
 dotenv.config();
 
+var cors = require('cors')
+
 const bodyParser = require("body-parser");
 
 const app = express();
+
+app.use(
+  cors({
+    origin: "*", // یا آدرس سایتت
+    methods: ["GET", "POST"],
+  })
+);
 
 app.use(bodyParser.json());
 // Middleware to parse incoming JSON
