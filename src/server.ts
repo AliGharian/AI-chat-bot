@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 import { GeminiClient } from "./Models/GeminiClient";
 dotenv.config();
 
-var cors = require('cors')
+var cors = require("cors");
 
 const bodyParser = require("body-parser");
 
@@ -38,7 +38,6 @@ const messageRepository = new Repository<IMessage>(
 );
 
 const gemini = new GeminiClient(process.env.GEMINI_API_KEY!);
-
 app.post("/api/stream", async (req, res) => {
   const { prompt } = req.body;
 
@@ -48,29 +47,50 @@ app.post("/api/stream", async (req, res) => {
       .json({ error: "Prompt is required and must be a string." });
   }
 
+  // هدرهای استریم
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
+
+  let streamEnded = false;
+  const fallbackTimeout = setTimeout(() => {
+    if (!streamEnded) {
+      res.write("❌ خطا: پاسخ طولانی یا اتصال قطع شد.\n");
+      res.end();
+    }
+  }, 15000); // 15 ثانیه اگر هیچ chunk نیومد
 
   try {
     await gemini.generateText({
       prompt,
-      onData: (chunk) => res.write(chunk),
-      onEnd: () => res.end(),
+      onData: (chunk) => {
+        if (!res.writableEnded) {
+          res.write(chunk);
+        }
+      },
+      onEnd: () => {
+        streamEnded = true;
+        clearTimeout(fallbackTimeout);
+        if (!res.writableEnded) res.end();
+      },
       onError: (err) => {
         console.error("Stream error:", err);
+        streamEnded = true;
+        clearTimeout(fallbackTimeout);
         if (!res.headersSent) {
           res.status(500).end("Error: " + err.message);
-        } else {
-          res.end();
+        } else if (!res.writableEnded) {
+          res.end("❌ خطا در استریم پاسخ.\n");
         }
       },
     });
   } catch (err: any) {
     console.error("Gemini API error:", err);
+    streamEnded = true;
+    clearTimeout(fallbackTimeout);
     if (!res.headersSent) {
       res.status(500).json({ error: "Internal server error." });
-    } else {
-      res.end();
+    } else if (!res.writableEnded) {
+      res.end("❌ خطا در پردازش درخواست.\n");
     }
   }
 });
