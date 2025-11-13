@@ -3,8 +3,8 @@ import express, { Request, Response } from "express";
 import { COLLECTIONS, MongoDatabaseManager } from "./data/repository/mongodb";
 import { IDatabase, IMessage, IUser } from "./types";
 import { Repository } from "./data/repository";
-import { GeminiClient } from "./utils";
 import dotenv from "dotenv";
+import { GeminiClient } from "./Models/GeminiClient";
 dotenv.config();
 
 const bodyParser = require("body-parser");
@@ -30,18 +30,40 @@ const messageRepository = new Repository<IMessage>(
 
 const gemini = new GeminiClient(process.env.GEMINI_API_KEY!);
 
-app.get("/api/stream", async (req, res) => {
+app.post("/api/stream", async (req, res) => {
+  const { prompt } = req.body;
+
+  if (!prompt || typeof prompt !== "string") {
+    return res
+      .status(400)
+      .json({ error: "Prompt is required and must be a string." });
+  }
+
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
 
-  await gemini.generateText({
-    prompt: "یه شعر کوتاه درباره دریا بنویس.",
-    onData: (chunk) => res.write(chunk), // هر تکه را به کلاینت بفرست
-    onEnd: () => res.end(), // وقتی تموم شد
-    onError: (err) => {
-      res.status(500).end("Error: " + err.message);
-    },
-  });
+  try {
+    await gemini.generateText({
+      prompt,
+      onData: (chunk) => res.write(chunk),
+      onEnd: () => res.end(),
+      onError: (err) => {
+        console.error("Stream error:", err);
+        if (!res.headersSent) {
+          res.status(500).end("Error: " + err.message);
+        } else {
+          res.end();
+        }
+      },
+    });
+  } catch (err: any) {
+    console.error("Gemini API error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error." });
+    } else {
+      res.end();
+    }
+  }
 });
 
 app.post("/users", async (req: Request, res: Response): Promise<any> => {
