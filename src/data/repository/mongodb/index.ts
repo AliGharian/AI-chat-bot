@@ -1,5 +1,7 @@
 import { MongoClient, Db } from "mongodb";
 import { IDatabase } from "../../../types";
+import dotenv from "dotenv";
+dotenv.config();
 
 // Database collections to avoid possible typo
 export const COLLECTIONS = {

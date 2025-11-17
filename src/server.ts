@@ -1,10 +1,10 @@
 import express, { Request, Response } from "express";
-
 import { COLLECTIONS, MongoDatabaseManager } from "./data/repository/mongodb";
 import { IDatabase, IMessage, IUser } from "./types";
 import { Repository } from "./data/repository";
 import dotenv from "dotenv";
 import { GeminiClient } from "./Models/GeminiClient";
+import { ObjectId } from "mongodb";
 dotenv.config();
 
 var cors = require("cors");
@@ -15,7 +15,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*", // یا آدرس سایتت
+    origin: "*",
     methods: ["GET", "POST"],
   })
 );
@@ -37,8 +37,36 @@ const messageRepository = new Repository<IMessage>(
   COLLECTIONS.MESSAGE
 );
 
+app.post("/messages", async (req, res) => {
+  try {
+    const { text, userId, sessionId } = req.body;
+
+    if (!text || !userId || !sessionId) {
+      return res
+        .status(400)
+        .send({ error: "text, userId, sessionId required" });
+    }
+
+    const userMessage: IMessage = {
+      user_id: new ObjectId(userId),
+      conversation_id: null,
+      sessionId,
+      role: "USER",
+      text,
+      createdAt: new Date(),
+    };
+
+    await messageRepository.create(userMessage);
+    res.status(200).json({ message: "Message created successfully." });
+  } catch (error) {
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
 const gemini = new GeminiClient(process.env.GEMINI_API_KEY!);
+
 app.post("/api/stream", async (req, res) => {
+  console.log("this api called");
   const { prompt } = req.body;
 
   if (!prompt || typeof prompt !== "string") {
@@ -47,29 +75,51 @@ app.post("/api/stream", async (req, res) => {
       .json({ error: "Prompt is required and must be a string." });
   }
 
-  // هدرهای استریم
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
 
   let streamEnded = false;
+  let botFullText = "";
+
+  const result = await messageRepository.create({
+    user_id: null,
+    conversation_id: null,
+    sessionId: null,
+    role: "USER",
+    text: prompt,
+    createdAt: new Date(),
+  });
+
+  console.log("Result is: ", result);
+
   const fallbackTimeout = setTimeout(() => {
     if (!streamEnded) {
       res.write("❌ خطا: پاسخ طولانی یا اتصال قطع شد.\n");
       res.end();
     }
-  }, 15000); // 15 ثانیه اگر هیچ chunk نیومد
+  }, 15000);
 
   try {
     await gemini.generateText({
       prompt,
       onData: (chunk) => {
+        botFullText += chunk;
         if (!res.writableEnded) {
           res.write(chunk);
         }
       },
-      onEnd: () => {
+      onEnd: async () => {
         streamEnded = true;
         clearTimeout(fallbackTimeout);
+
+        await messageRepository.create({
+          user_id: null,
+          conversation_id: null,
+          sessionId: null,
+          role: "BOT",
+          text: botFullText,
+          createdAt: new Date(),
+        });
         if (!res.writableEnded) res.end();
       },
       onError: (err) => {
