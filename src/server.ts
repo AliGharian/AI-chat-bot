@@ -101,7 +101,7 @@ const gemini = new GeminiClient(process.env.GEMINI_API_KEY!);
 
 app.post("/api/stream", async (req, res) => {
   console.log("this api called");
-  const { prompt } = req.body;
+  const { prompt, sessionId } = req.body;
 
   if (!prompt || typeof prompt !== "string") {
     return res
@@ -109,7 +109,6 @@ app.post("/api/stream", async (req, res) => {
       .json({ error: "Prompt is required and must be a string." });
   }
 
-  // 1) چک کن لینک هست یا نه
   const url = extractUrl(prompt);
 
   let pageText = "";
@@ -141,7 +140,7 @@ app.post("/api/stream", async (req, res) => {
   const result = await messageRepository.create({
     user_id: null,
     conversation_id: null,
-    sessionId: null,
+    sessionId,
     role: "USER",
     text: prompt,
     createdAt: new Date(),
@@ -172,7 +171,7 @@ app.post("/api/stream", async (req, res) => {
         await messageRepository.create({
           user_id: null,
           conversation_id: null,
-          sessionId: null,
+          sessionId,
           role: "BOT",
           text: botFullText,
           createdAt: new Date(),
