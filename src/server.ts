@@ -54,6 +54,14 @@ app.post("/api/session", async (req, res) => {
 
     const { deviceId, startPage, referrer, userId, language } = req.body;
 
+    const existing = await sessionRepository.get({ sessionId: deviceId });
+    if (existing) {
+      return res.json({
+        message: "already-exists",
+        deviceId,
+      });
+    }
+
     const sessionData: ISession = {
       sessionId: deviceId,
       userId: null,
