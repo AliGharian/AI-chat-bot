@@ -13,4 +13,21 @@ export class Repository<T> {
   async get(query: any, lookup?: any) {
     return await this.db.findOne(this.collectionName, query, lookup);
   }
+
+  async findAll(
+    query: any,
+    limit?: number,
+    skip?: number,
+    lookup?: any,
+    sort?: any
+  ) {
+    return await this.db.findAll(
+      this.collectionName,
+      query,
+      limit,
+      skip,
+      lookup,
+      sort
+    );
+  }
 }

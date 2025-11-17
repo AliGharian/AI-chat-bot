@@ -89,6 +89,58 @@ export class MongoDatabaseManager implements IDatabase {
     }
   }
 
+  async findAll(
+    collectionName: string,
+    query: any,
+    limit?: number,
+    skip?: number,
+    lookup?: any,
+    sort?: any
+  ): Promise<any> {
+    const db = await this.connect();
+    try {
+      const pipeline: any = [
+        {
+          $match: query ?? {},
+        },
+      ];
+
+      if (lookup) {
+        if (Array.isArray(lookup)) {
+          pipeline.push(...lookup);
+        } else {
+          pipeline.push(lookup);
+        }
+      }
+
+      if (sort) {
+        pipeline.push({
+          $sort: sort,
+        });
+      }
+
+      if (skip !== undefined) {
+        pipeline.push({
+          $skip: skip ?? 0,
+        });
+      }
+
+      if (limit !== undefined) {
+        pipeline.push({
+          $limit: limit ?? Infinity,
+        });
+      }
+
+      return await db?.collection(collectionName).aggregate(pipeline).toArray();
+    } catch (error) {
+      console.error(
+        `Failed to find any document by query in ${collectionName}`,
+        error
+      );
+      throw error;
+    }
+  }
+
   async close(): Promise<void> {
     if (this.client) {
       await this.client.close();

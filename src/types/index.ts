@@ -3,6 +3,14 @@ import { ObjectId } from "mongodb";
 export interface IDatabase {
   insertOne(collectionName: string, dataObject: any): Promise<any>;
   findOne(collectionName: string, query: any, lookup?: any): Promise<any>;
+  findAll(
+    collectionName: string,
+    query: any,
+    limit?: number,
+    skip?: number,
+    lookup?: any,
+    sort?: any
+  ): Promise<any>;
 }
 
 export interface IUser {}
@@ -19,12 +27,6 @@ export interface ISession {
   referrer: string | null;
   startPage: string;
   pages: string[];
-  geo: {
-    country?: string;
-    city?: string;
-    region?: string;
-    ll?: number[];
-  };
   createdAt: Date;
   updatedAt: Date;
 }
