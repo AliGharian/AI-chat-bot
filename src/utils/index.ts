@@ -1,4 +1,5 @@
 import axios from "axios";
+import { IMessage } from "../types";
 
 export function extractUrl(text: string): string | null {
   const regex = /(https?:\/\/[^\s]+)/g;
@@ -28,4 +29,10 @@ export function stripHtml(html: string) {
     .replace(/<\/?[^>]+>/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function buildHistoryPrompt(messages: IMessage[]) {
+  return messages
+    .map(m => `${m.role === "USER" ? "کاربر" : "دستیار"}: ${m.text}`)
+    .join("\n");
 }

@@ -5,7 +5,12 @@ import { Repository } from "./data/repository";
 import dotenv from "dotenv";
 import { GeminiClient } from "./Models/GeminiClient";
 import { UAParser } from "ua-parser-js";
-import { extractUrl, fetchPageContent, stripHtml } from "./utils";
+import {
+  buildHistoryPrompt,
+  extractUrl,
+  fetchPageContent,
+  stripHtml,
+} from "./utils";
 dotenv.config();
 
 var cors = require("cors");
@@ -109,6 +114,16 @@ app.post("/api/stream", async (req, res) => {
       .json({ error: "Prompt is required and must be a string." });
   }
 
+  const lastMessages = await messageRepository.findAll(
+    sessionId,
+    20,
+    0,
+    undefined,
+    { createdAt: -1 }
+  );
+
+  const historyText = buildHistoryPrompt(lastMessages);
+
   const url = extractUrl(prompt);
 
   let pageText = "";
@@ -123,13 +138,25 @@ app.post("/api/stream", async (req, res) => {
     }
   }
 
-  // 2) ساختن پرامپت نهایی
-  const finalPrompt = url
-    ? `  کاربر از من خواسته این لینک رو بررسی کنم:${url} محتوای صفحه: ${pageText.substring(
-        0,
-        30000
-      )}   (فقط 30k کاراکتر برای جلوگیری از بزرگ شدن prompt)  سؤال کاربر:${prompt}`
-    : prompt;
+  const finalPrompt = `
+          این چت‌ سابق بین کاربر و دستیار:
+
+          ${historyText}
+
+          --------------------
+          سؤال جدید کاربر:
+          ${prompt}
+          --------------------
+
+          ${
+            url
+              ? `کاربر لینک داده: ${url}
+          خلاصه محتوای صفحه:
+          ${pageText.substring(0, 30000)}
+          `
+              : ""
+          }
+          `;
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
