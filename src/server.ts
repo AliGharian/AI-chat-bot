@@ -29,7 +29,7 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const DATABASE_NAME = process.env.DATABASE_NAME;
 
 const databaseURL = `${DATABASE_URL}/${DATABASE_NAME}`;
-const dbManager: IDatabase = MongoDatabaseManager.getInstance(databaseURL);
+const dbManager: IDatabase = MongoDatabaseManager.getInstance();
 
 const userRepository = new Repository<IUser>(dbManager, COLLECTIONS.USER);
 const messageRepository = new Repository<IMessage>(
