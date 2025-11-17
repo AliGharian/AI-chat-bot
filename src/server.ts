@@ -1,10 +1,12 @@
 import express, { Request, Response } from "express";
 import { COLLECTIONS, MongoDatabaseManager } from "./data/repository/mongodb";
-import { IDatabase, IMessage, IUser } from "./types";
+import { IDatabase, IMessage, ISession, IUser } from "./types";
 import { Repository } from "./data/repository";
 import dotenv from "dotenv";
 import { GeminiClient } from "./Models/GeminiClient";
 import { ObjectId } from "mongodb";
+import { UAParser } from "ua-parser-js";
+import { extractUrl, fetchPageContent, stripHtml } from "./utils";
 dotenv.config();
 
 var cors = require("cors");
@@ -25,19 +27,111 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 
 const PORT = process.env.WEB_SERVER_PORT;
-const DATABASE_URL = process.env.DATABASE_URL;
-const DATABASE_NAME = process.env.DATABASE_NAME;
 
-const databaseURL = `${DATABASE_URL}/${DATABASE_NAME}`;
 const dbManager: IDatabase = MongoDatabaseManager.getInstance();
 
-const userRepository = new Repository<IUser>(dbManager, COLLECTIONS.USER);
+const sessionRepository = new Repository<ISession>(
+  dbManager,
+  COLLECTIONS.SESSION
+);
 const messageRepository = new Repository<IMessage>(
   dbManager,
   COLLECTIONS.MESSAGE
 );
 
+// app.post("/api/session/start", async (req, res) => {
+//   try {
+//     const userAgent = req.headers["user-agent"] || "";
+//     const parser = new UAParser(userAgent);
+//     const ua = parser.getResult();
+
+//     const ip =
+//       req.headers["x-forwarded-for"] || req.socket.remoteAddress || "0.0.0.0";
+
+//     const geo = ""
+
+//     const { sessionId, startPage, referrer, userId, language } = req.body;
+
+//     const sessionData: ISession = {
+//       sessionId,
+//       userId: userId ? new ObjectId(userId) : null,
+
+//       device: ua.device.type || "desktop",
+//       language: language || req.headers["accept-language"] || "",
+//       referrer: referrer || null,
+//       startPage,
+//       pages: [startPage],
+//       geo: {
+//         country: geo?.country,
+//         city: geo?.city,
+//         region: geo?.region,
+//         ll: geo?.ll,
+//       },
+//       createdAt: new Date(),
+//       updatedAt: new Date(),
+//     };
+
+//     await sessionRepository.create(sessionData);
+
+//     res.json({
+//       message: true,
+//       sessionId,
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: "Server Error" });
+//   }
+// });
+
+app.post("/users", async (req: Request, res: Response): Promise<any> => {
+  console.log(`POST /auth =>`, req.body);
+
+  const body = req.body;
+
+  if (!body?.username || !body?.password) {
+    return res
+      .status(400)
+      .json({ message: "Username and password are required" });
+  }
+
+  const { username, password } = body;
+
+  try {
+  } catch (error) {
+    console.error("Auth error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+//? User route
+app.get("/me/user", async (req: Request, res: Response): Promise<any> => {});
+
 app.post("/messages", async (req, res) => {
+  try {
+    const { text, userId, sessionId } = req.body;
+
+    if (!text || !userId || !sessionId) {
+      return res
+        .status(400)
+        .send({ error: "text, userId, sessionId required" });
+    }
+
+    const userMessage: IMessage = {
+      user_id: new ObjectId(userId),
+      conversation_id: null,
+      sessionId,
+      role: "USER",
+      text,
+      createdAt: new Date(),
+    };
+
+    await messageRepository.create(userMessage);
+    res.status(200).json({ message: "Message created successfully." });
+  } catch (error) {
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.get("/messages", async (req, res) => {
   try {
     const { text, userId, sessionId } = req.body;
 
@@ -75,6 +169,29 @@ app.post("/api/stream", async (req, res) => {
       .json({ error: "Prompt is required and must be a string." });
   }
 
+  // 1) چک کن لینک هست یا نه
+  const url = extractUrl(prompt);
+
+  let pageText = "";
+
+  if (url) {
+    console.log("Fetching URL:", url);
+    const html = await fetchPageContent(url);
+
+    if (html) {
+      pageText = stripHtml(html);
+      console.log("HTML extracted length:", pageText.length);
+    }
+  }
+
+  // 2) ساختن پرامپت نهایی
+  const finalPrompt = url
+    ? `  کاربر از من خواسته این لینک رو بررسی کنم:${url} محتوای صفحه: ${pageText.substring(
+        0,
+        30000
+      )}   (فقط 30k کاراکتر برای جلوگیری از بزرگ شدن prompt)  سؤال کاربر:${prompt}`
+    : prompt;
+
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
 
@@ -101,7 +218,7 @@ app.post("/api/stream", async (req, res) => {
 
   try {
     await gemini.generateText({
-      prompt,
+      prompt: finalPrompt,
       onData: (chunk) => {
         botFullText += chunk;
         if (!res.writableEnded) {
@@ -144,29 +261,6 @@ app.post("/api/stream", async (req, res) => {
     }
   }
 });
-
-app.post("/users", async (req: Request, res: Response): Promise<any> => {
-  console.log(`POST /auth =>`, req.body);
-
-  const body = req.body;
-
-  if (!body?.username || !body?.password) {
-    return res
-      .status(400)
-      .json({ message: "Username and password are required" });
-  }
-
-  const { username, password } = body;
-
-  try {
-  } catch (error) {
-    console.error("Auth error:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-});
-
-//? User route
-app.get("/me/user", async (req: Request, res: Response): Promise<any> => {});
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);

@@ -5,7 +5,7 @@ dotenv.config();
 
 // Database collections to avoid possible typo
 export const COLLECTIONS = {
-  USER: "users",
+  SESSION: "sessions",
   MESSAGE: "messages",
 };
 

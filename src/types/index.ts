@@ -7,6 +7,28 @@ export interface IDatabase {
 
 export interface IUser {}
 
+export interface ISession {
+  _id?: ObjectId;
+  sessionId: string;
+  userId?: ObjectId | null;
+  ip: string;
+  browser: string;
+  os: string;
+  device: string;
+  language: string;
+  referrer: string | null;
+  startPage: string;
+  pages: string[];
+  geo: {
+    country?: string;
+    city?: string;
+    region?: string;
+    ll?: number[];
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface IMessage {
   _id?: ObjectId;
   user_id: ObjectId | null;
