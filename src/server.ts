@@ -115,7 +115,7 @@ app.post("/api/stream", async (req, res) => {
   }
 
   const lastMessages = await messageRepository.findAll(
-    sessionId,
+    { sessionId },
     20,
     0,
     undefined,
