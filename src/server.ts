@@ -132,11 +132,7 @@ app.post("/api/stream", async (req, res) => {
     { createdAt: -1 }
   );
 
-  console.log("Last Messages: ", lastMessages);
-
   const historyText = buildHistoryPrompt(lastMessages);
-
-  console.log("last history: ", historyText);
 
   const url = extractUrl(prompt);
 
