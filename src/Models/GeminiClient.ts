@@ -1,8 +1,11 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { scrapePage } from "../utils";
 
+/* ---------- TYPES ---------- */
 interface GenerateOptions {
   model?: string;
   prompt: string;
+  pageUrl?: string;
   temperature?: number;
   topP?: number;
   maxOutputTokens?: number;
@@ -11,6 +14,7 @@ interface GenerateOptions {
   onError?: (err: any) => void;
 }
 
+/* ---------- Gemini Client With Actions ---------- */
 export class GeminiClient {
   private client: GoogleGenAI;
 
@@ -22,11 +26,24 @@ export class GeminiClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /* ---------- Define Actions ---------- */
+
+  /* ---------- Action Execution ---------- */
+  private async executeAction(name: string, args: any) {
+    if (name === "scrapePage") {
+      return await scrapePage(args.url);
+    }
+
+    throw new Error("Unknown action: " + name);
+  }
+
+  /* ----------   Send Message + Action Manage + Stream   ---------- */
   async generateText(options: GenerateOptions): Promise<void> {
-    const model = options.model ?? "gemini-2.5-flash";
+    const model = options.model ?? "gemini-2.5-pro";
 
     const SYSTEM_INSTRUCTION = [
       "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly with users.",
+      "If user asks questions about the current webpage, call the scrapePage action using the provided pageUrl.",
     ];
 
     let attempts = 0;
@@ -36,6 +53,101 @@ export class GeminiClient {
       try {
         attempts++;
 
+        const countTokensResponse = await this.client.models.countTokens({
+          model: model,
+          contents: options.prompt,
+        });
+
+        console.log(countTokensResponse.totalTokens);
+
+        /* ---------- First Step Call the Model ---------- */
+        const response = await this.client.models.generateContent({
+          model,
+          config: {
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: "scrapePage",
+                    description: "Scrape webpage HTML and return readable text",
+                    parameters: {
+                      type: Type.OBJECT,
+                      properties: {
+                        url: { type: Type.STRING },
+                      },
+                      required: ["url"],
+                    },
+                  },
+                  // add more actions
+                ],
+              },
+            ],
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: options.temperature,
+            topP: options.topP,
+            maxOutputTokens: options.maxOutputTokens,
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `
+                      پیام کاربر:
+                      ${options.prompt}
+
+                      آدرس صفحه فعلی کاربر:
+                      ${options.pageUrl ?? "unknown"}
+
+                      اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
+                  `,
+                },
+              ],
+            },
+          ],
+        });
+
+        /* ---------- if needs action ---------- */
+        const actionCall = response?.functionCalls;
+
+        // if (actionCall && actionCall.length > 0) {
+        //   const actionName = actionCall[0].name;
+        //   const actionArgs = actionCall[0].args;
+
+        //   const toolResult = await this.executeAction(actionName, actionArgs);
+
+        //   // send the result to AI
+        //   const stream = await this.client.models.generateContentStream({
+        //     model,
+        //     config: {
+        //       systemInstruction: SYSTEM_INSTRUCTION,
+        //       temperature: options.temperature,
+        //       topP: options.topP,
+        //       maxOutputTokens: options.maxOutputTokens,
+        //     },
+        //     contents: [
+        //       {
+        //         role: "user",
+        //         parts: [{text: options.prompt }],
+        //       },
+        //     ],
+
+        //   });
+
+        //   // output stream
+        //   for await (const event of stream) {
+        //     const text = event?.candidates?.[0]?.content?.parts
+        //       ?.map((p) => p.text)
+        //       ?.join("");
+
+        //     if (text && options.onData) options.onData(text);
+        //   }
+
+        //   if (options.onEnd) options.onEnd();
+        //   return;
+        // }
+
+        /* ---------- If there is no action ---------- */
         const stream = await this.client.models.generateContentStream({
           model,
           config: {
@@ -61,21 +173,17 @@ export class GeminiClient {
         }
 
         if (options.onEnd) options.onEnd();
-        return; // موفق شد → خارج شو
+        return;
       } catch (err: any) {
         const code = err?.status || err?.code || err?.error?.code;
 
-        // فقط روی 503 Retry کن
         if (code === 503 && attempts < maxAttempts) {
-          const waitTime = attempts * 1000; // Exponential-ish backoff
-          console.warn(
-            `Gemini 503 detected. Retry in ${waitTime} ms (attempt ${attempts})`
-          );
+          const waitTime = attempts * 1000;
+          console.warn(`503 from Gemini. Retry in ${waitTime} ms`);
           await this.wait(waitTime);
           continue;
         }
 
-        // اگر غیر از 503 بود یا 5 بار تلاش تمام شد
         if (options.onError) options.onError(err);
         else console.error("Gemini stream error:", err);
         return;

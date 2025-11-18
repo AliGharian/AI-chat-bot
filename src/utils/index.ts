@@ -33,6 +33,16 @@ export function stripHtml(html: string) {
 
 export function buildHistoryPrompt(messages: IMessage[]) {
   return messages
-    .map(m => `${m.role === "USER" ? "کاربر" : "دستیار"}: ${m.text}`)
+    .map((m) => `${m.role === "USER" ? "کاربر" : "دستیار"}: ${m.text}`)
     .join("\n");
+}
+
+export async function scrapePage(url: string): Promise<string> {
+  try {
+    const html = await fetch(url).then((res) => res.text());
+    const clean = html.replace(/<[^>]*>?/gm, " "); // ساده‌ترین پاکسازی
+    return clean.substring(0, 20000);
+  } catch (err) {
+    return "Error scraping page.";
+  }
 }
