@@ -139,16 +139,16 @@ export class GeminiClient {
             role: "model",
             parts: [
               {
-                text: actionCall.toString(),
-              },
+                functionCall: actionCall,
+              } as any,
             ],
           });
           contents.push({
             role: "user",
             parts: [
               {
-                text: functionResponsePart.toString(),
-              },
+                functionResponse: functionResponsePart,
+              } as any,
             ],
           });
 
