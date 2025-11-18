@@ -39,7 +39,7 @@ export class GeminiClient {
 
   /* ----------   Send Message + Action Manage + Stream   ---------- */
   async generateText(options: GenerateOptions): Promise<void> {
-    const model = options.model ?? "gemini-2.5-pro";
+    const model = options.model ?? "gemini-2.5-flash";
 
     const SYSTEM_INSTRUCTION = [
       "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly with users.",
