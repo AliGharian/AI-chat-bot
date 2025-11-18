@@ -110,42 +110,72 @@ export class GeminiClient {
         /* ---------- if needs action ---------- */
         const actionCall = response?.functionCalls;
 
-        // if (actionCall && actionCall.length > 0) {
-        //   const actionName = actionCall[0].name;
-        //   const actionArgs = actionCall[0].args;
+        // Prompt for the model
+        let contents = [
+          {
+            role: "user",
+            parts: [{ text: options.prompt }],
+          },
+        ];
 
-        //   const toolResult = await this.executeAction(actionName, actionArgs);
+        if (actionCall && actionCall.length > 0) {
+          const actionName = actionCall[0].name;
+          const actionArgs = actionCall[0].args;
 
-        //   // send the result to AI
-        //   const stream = await this.client.models.generateContentStream({
-        //     model,
-        //     config: {
-        //       systemInstruction: SYSTEM_INSTRUCTION,
-        //       temperature: options.temperature,
-        //       topP: options.topP,
-        //       maxOutputTokens: options.maxOutputTokens,
-        //     },
-        //     contents: [
-        //       {
-        //         role: "user",
-        //         parts: [{text: options.prompt }],
-        //       },
-        //     ],
+          if (!actionName) {
+            throw new Error(`Unknown function call: ${name}`);
+          }
 
-        //   });
+          const toolResult = await this.executeAction(actionName, actionArgs);
 
-        //   // output stream
-        //   for await (const event of stream) {
-        //     const text = event?.candidates?.[0]?.content?.parts
-        //       ?.map((p) => p.text)
-        //       ?.join("");
+          const functionResponsePart = {
+            name: actionName,
+            response: {
+              result: toolResult,
+            },
+          };
 
-        //     if (text && options.onData) options.onData(text);
-        //   }
+          contents.push({
+            role: "model",
+            parts: [
+              {
+                text: actionCall.toString(),
+              },
+            ],
+          });
+          contents.push({
+            role: "user",
+            parts: [
+              {
+                text: functionResponsePart.toString(),
+              },
+            ],
+          });
 
-        //   if (options.onEnd) options.onEnd();
-        //   return;
-        // }
+          // send the result to AI
+          const stream = await this.client.models.generateContentStream({
+            model,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: options.temperature,
+              topP: options.topP,
+              maxOutputTokens: options.maxOutputTokens,
+            },
+            contents,
+          });
+
+          // output stream
+          for await (const event of stream) {
+            const text = event?.candidates?.[0]?.content?.parts
+              ?.map((p) => p.text)
+              ?.join("");
+
+            if (text && options.onData) options.onData(text);
+          }
+
+          if (options.onEnd) options.onEnd();
+          return;
+        }
 
         /* ---------- If there is no action ---------- */
         const stream = await this.client.models.generateContentStream({

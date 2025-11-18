@@ -114,7 +114,9 @@ const gemini = new GeminiClient(process.env.GEMINI_API_KEY!);
 
 app.post("/api/stream", async (req, res) => {
   console.log("this api called");
-  const { prompt, sessionId } = req.body;
+  const { prompt, sessionId, pageUrl } = req.body;
+
+  console.log("Page URL: ", pageUrl);
 
   if (!prompt || typeof prompt !== "string") {
     return res
@@ -197,6 +199,7 @@ app.post("/api/stream", async (req, res) => {
   try {
     await gemini.generateText({
       prompt: finalPrompt,
+      pageUrl: pageUrl,
       onData: (chunk) => {
         botFullText += chunk;
         if (!res.writableEnded) {
