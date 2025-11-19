@@ -196,7 +196,7 @@ app.post("/api/stream", async (req, res) => {
     await gemini.generateText({
       prompt: finalPrompt,
       pageUrl: pageUrl,
-      onData: (chunk) => {
+      onData: (chunk: any) => {
         botFullText += chunk;
         if (!res.writableEnded) {
           res.write(chunk);
@@ -216,7 +216,7 @@ app.post("/api/stream", async (req, res) => {
         });
         if (!res.writableEnded) res.end();
       },
-      onError: (err) => {
+      onError: (err: any) => {
         console.error("Stream error:", err);
         streamEnded = true;
         clearTimeout(fallbackTimeout);

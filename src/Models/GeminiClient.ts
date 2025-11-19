@@ -1,20 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { scrapePage } from "../utils";
 
-/* ---------- TYPES ---------- */
-interface GenerateOptions {
-  model?: string;
-  prompt: string;
-  pageUrl?: string;
-  temperature?: number;
-  topP?: number;
-  maxOutputTokens?: number;
-  onData?: (chunk: string) => void;
-  onEnd?: () => void;
-  onError?: (err: any) => void;
-}
-
-/* ---------- Gemini Client + Function Calling ---------- */
 export class GeminiClient {
   private client: GoogleGenAI;
 
@@ -26,7 +12,6 @@ export class GeminiClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /* ---------- Execute Action ---------- */
   private async executeAction(name: string, args: any) {
     if (name === "scrapePage") {
       return await scrapePage(args.url);
@@ -34,31 +19,12 @@ export class GeminiClient {
     throw new Error("Unknown action: " + name);
   }
 
-  /* ---------- Generate Text + Tool Calling ---------- */
-  async generateText(options: GenerateOptions): Promise<void> {
+  async generateText(options: any): Promise<void> {
     const model = options.model ?? "gemini-2.5-flash";
 
     const SYSTEM_INSTRUCTION = [
-      "You are SafeGPT, the official assistant of SafeBroker.org.",
-      "If the user asks anything about the current webpage, call scrapePage with pageUrl.",
-    ];
-
-    const toolDeclarations = [
-      {
-        functionDeclarations: [
-          {
-            name: "scrapePage",
-            description: "Scrape webpage HTML and return readable plain text.",
-            parameters: {
-              type: Type.OBJECT,
-              properties: {
-                url: { type: Type.STRING },
-              },
-              required: ["url"],
-            },
-          },
-        ],
-      },
+      "You are SafeGPT, the assistant of SafeBroker.org.",
+      "If user asks about the current webpage, call scrapePage.",
     ];
 
     let attempts = 0;
@@ -67,21 +33,27 @@ export class GeminiClient {
     while (attempts < maxAttempts) {
       try {
         attempts++;
-        console.log("Attempts:", attempts);
 
-        /* ---------- count tokens ---------- */
-        const tokenCount = await this.client.models.countTokens({
-          model,
-          contents: options.prompt,
-        });
-        console.log("Tokens:", tokenCount.totalTokens);
-
-        /* ---------- STEP 1 — send user request to Gemini ---------- */
-        const first = await this.client.models.generateContent({
+        /* STEP 1 — Send user message */
+        const response = await this.client.models.generateContent({
           model,
           config: {
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: "scrapePage",
+                    description: "Scrape webpage HTML and return readable text",
+                    parameters: {
+                      type: Type.OBJECT,
+                      properties: { url: { type: Type.STRING } },
+                      required: ["url"],
+                    },
+                  },
+                ],
+              },
+            ],
             systemInstruction: SYSTEM_INSTRUCTION,
-            tools: toolDeclarations,
             temperature: options.temperature,
             topP: options.topP,
             maxOutputTokens: options.maxOutputTokens,
@@ -89,33 +61,17 @@ export class GeminiClient {
           contents: [
             {
               role: "user",
-              parts: [
-                {
-                  text: `
-پیام کاربر:
-${options.prompt}
-
-آدرس صفحه فعلی:
-${options.pageUrl ?? "unknown"}
-
-اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
-`,
-                },
-              ],
+              parts: [{ text: options.prompt }],
             },
           ],
         });
 
-        console.log("FIRST AI RESPONSE:", first);
-
-        /* ---------- detect function call ---------- */
-        const callPart = first.candidates?.[0]?.content?.parts?.find(
+        const actionCall = response.candidates?.[0]?.content?.parts?.find(
           (p: any) => p.functionCall
-        );
+        )?.functionCall;
 
-        console.log("Call parts: ", first.candidates?.[0]?.content);
-        /* ---------- NO FUNCTION CALL: just stream normally ---------- */
-        if (!callPart) {
+        /* NO ACTION → normal streaming */
+        if (!actionCall) {
           const stream = await this.client.models.generateContentStream({
             model,
             config: {
@@ -124,19 +80,14 @@ ${options.pageUrl ?? "unknown"}
               topP: options.topP,
               maxOutputTokens: options.maxOutputTokens,
             },
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: options.prompt }],
-              },
-            ],
+            contents: [{ role: "user", parts: [{ text: options.prompt }] }],
           });
 
           for await (const event of stream) {
-            const text = event?.candidates?.[0]?.content?.parts
-              ?.map((p) => p.text)
-              ?.join("");
-
+            const text =
+              event?.candidates?.[0]?.content?.parts
+                ?.map((p) => p.text)
+                ?.join("") ?? "";
             if (text && options.onData) options.onData(text);
           }
 
@@ -144,58 +95,77 @@ ${options.pageUrl ?? "unknown"}
           return;
         }
 
-        /* ---------- STEP 2 — functionCall exists ---------- */
-        const actionName = callPart?.functionCall?.name;
-        const actionArgs = callPart?.functionCall?.args;
+        /* THERE IS AN ACTION → EXECUTE IT */
+        const actionName = actionCall.name;
+        const actionArgs = actionCall.args;
 
-        console.log("Function Call:", actionName, actionArgs);
-
-        if (!actionName) throw new Error("There is No action name");
+        if (!actionName) throw new Error("Invalid action call name");
         const toolResult = await this.executeAction(actionName, actionArgs);
 
-        /* ---------- STEP 3 — send ONLY functionResponse turn ---------- */
+        /* GEMINI RULE:
+           The very next message must be ONLY functionResponse.
+        */
+        const followup = [
+          {
+            role: "function",
+            parts: [
+              {
+                functionResponse: {
+                  name: actionName,
+                  response: toolResult,
+                },
+              },
+            ],
+          },
+        ];
 
-        const followStream = await this.client.models.generateContentStream({
+        /* Send follow-up response */
+        const stream2 = await this.client.models.generateContentStream({
           model,
-          contents: [
-            {
-              role: "function",
-              parts: [
-                {
-                  functionResponse: {
-                    name: actionName,
-                    response: { result: toolResult },
+          config: {
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: "scrapePage",
+                    description: "Scrape webpage HTML",
+                    parameters: {
+                      type: Type.OBJECT,
+                      properties: { url: { type: Type.STRING } },
+                      required: ["url"],
+                    },
                   },
-                } as any,
-              ],
-            },
-          ],
+                ],
+              },
+            ],
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: options.temperature,
+            topP: options.topP,
+            maxOutputTokens: options.maxOutputTokens,
+          },
+          contents: followup.toString(),
         });
 
-        for await (const event of followStream) {
-          const text = event?.candidates?.[0]?.content?.parts
-            ?.map((p) => p.text)
-            ?.join("");
-
+        for await (const event of stream2) {
+          const text =
+            event?.candidates?.[0]?.content?.parts
+              ?.map((p) => p.text)
+              ?.join("") ?? "";
           if (text && options.onData) options.onData(text);
         }
 
         if (options.onEnd) options.onEnd();
         return;
       } catch (err: any) {
-        // handle 503 retry
-        if (
-          (err?.status === 503 || err?.code === 503) &&
-          attempts < maxAttempts
-        ) {
-          const w = attempts * 1000;
-          console.warn(`503 from Gemini, retrying in ${w} ms`);
-          await this.wait(w);
+        const code = err?.status || err?.code;
+
+        if (code === 503 && attempts < maxAttempts) {
+          await this.wait(attempts * 1000);
           continue;
         }
 
         if (options.onError) options.onError(err);
-        else console.error("Gemini error:", err);
+        else console.error(err);
         return;
       }
     }
@@ -242,3 +212,14 @@ ${options.pageUrl ?? "unknown"}
 //       at async Models.generateContentStream (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:12572:24) {
 //     status: 400
 //   }
+
+const CallParts = {
+  parts: [
+    {
+      functionCall: [Object],
+      thoughtSignature:
+        "CqIDAdHtim8QE8Qr8EQAnD3SR43Udiz5HIgzrqa0wM56pBNroZMSgeqil4S99nglp9EAZBEcltjb07nYAijhhbPmre+O0n4mAYHpgP6DoSveCm1DoxDjoalPiGMxyAsxpgwADoWf+2mdFNGAx2RydYS/zlP8Rt7nUHqB8kbx5HHDM66KdCof+ZGT+0rms7u0S++t17rvoZIg/IMCDnWuXXPq5GejIuB9OmbEqt0W8RILJ+TIgtPZ+sDavbyQhZssSe1ZKvR1JNAlqeWLCJohaJAK/8v8StoFIx1xUS11l0zHokhiTv4VWG0m5+4l6YTFOUShzMx/mXjdTLx1boHlmAxVS9KZrRcHgjaDYoFiEXjSAHm2HUDxqNbKj+FeVGVJ6PpcVjRv/V73bZVoIZ+NLxACalyX3XfNJLeZq//+VWQTZxYoH33xiqFeU4kALAzF3in8yE7LpH9e5pZ+znL+2VkDkEBPt4pXJrJZ6P2jNiNAqeNBq4Yh+2g2iVDOJj7Ysa4adYoMx0uI+D1Bq/BYw8AiyH15e9g4sFXJB+lbUp26vLZORg==",
+    },
+  ],
+  role: "model",
+};
