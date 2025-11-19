@@ -52,13 +52,13 @@ export class GeminiClient {
     while (attempts < maxAttempts) {
       try {
         attempts++;
-
+        console.log("Attempts Number: ", attempts);
         const countTokensResponse = await this.client.models.countTokens({
           model: model,
           contents: options.prompt,
         });
 
-        console.log(countTokensResponse.totalTokens);
+        console.log("Token Number: ", countTokensResponse.totalTokens);
 
         /* ---------- First Step Call the Model ---------- */
         const response = await this.client.models.generateContent({
@@ -107,6 +107,8 @@ export class GeminiClient {
           ],
         });
 
+        console.log("First AI response: ", response);
+
         /* ---------- if needs action ---------- */
         const actionCall = response.candidates?.[0]?.content?.parts?.find(
           (p: any) => p.functionCall
@@ -119,6 +121,8 @@ export class GeminiClient {
             parts: [{ text: options.prompt }],
           },
         ];
+
+        console.log("Action call: ", actionCall);
 
         if (actionCall) {
           const actionName = actionCall.name;
