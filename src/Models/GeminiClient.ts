@@ -108,7 +108,9 @@ export class GeminiClient {
         });
 
         /* ---------- if needs action ---------- */
-        const actionCall = response?.functionCalls;
+        const actionCall = response.candidates?.[0]?.content?.parts?.find(
+          (p: any) => p.functionCall
+        )?.functionCall;
 
         // Prompt for the model
         let contents = [
@@ -118,58 +120,63 @@ export class GeminiClient {
           },
         ];
 
-        if (actionCall && actionCall.length > 0) {
-          const actionName = actionCall[0].name;
-          const actionArgs = actionCall[0].args;
+        if (actionCall) {
+          const actionName = actionCall.name;
+          const actionArgs = actionCall.args;
 
-          if (!actionName) {
-            throw new Error(`Unknown function call: ${name}`);
-          }
-
+          if (!actionName) throw new Error("There is no action namge");
           const toolResult = await this.executeAction(actionName, actionArgs);
 
-          const functionResponsePart = {
-            name: actionName,
-            response: {
-              result: toolResult,
+          const followupContents = [
+            {
+              role: "function",
+              parts: [
+                {
+                  functionResponse: {
+                    name: actionName,
+                    response: {
+                      result: toolResult,
+                    },
+                  },
+                } as any,
+              ],
             },
-          };
+          ];
 
-          contents.push({
-            role: "model",
-            parts: [
-              {
-                functionCall: actionCall,
-              } as any,
-            ],
-          });
-          contents.push({
-            role: "user",
-            parts: [
-              {
-                functionResponse: functionResponsePart,
-              } as any,
-            ],
-          });
-
-          // send the result to AI
+          // send follow-up to model
           const stream = await this.client.models.generateContentStream({
             model,
             config: {
+              tools: [
+                {
+                  functionDeclarations: [
+                    {
+                      name: "scrapePage",
+                      description:
+                        "Scrape webpage HTML and return readable text",
+                      parameters: {
+                        type: Type.OBJECT,
+                        properties: {
+                          url: { type: Type.STRING },
+                        },
+                        required: ["url"],
+                      },
+                    },
+                  ],
+                },
+              ],
               systemInstruction: SYSTEM_INSTRUCTION,
               temperature: options.temperature,
               topP: options.topP,
               maxOutputTokens: options.maxOutputTokens,
             },
-            contents,
+            contents: followupContents,
           });
 
-          // output stream
           for await (const event of stream) {
             const text = event?.candidates?.[0]?.content?.parts
               ?.map((p) => p.text)
               ?.join("");
-
             if (text && options.onData) options.onData(text);
           }
 
