@@ -113,6 +113,7 @@ ${options.pageUrl ?? "unknown"}
           (p: any) => p.functionCall
         );
 
+        console.log("Call parts: ", first.candidates?.[0]?.content);
         /* ---------- NO FUNCTION CALL: just stream normally ---------- */
         if (!callPart) {
           const stream = await this.client.models.generateContentStream({
