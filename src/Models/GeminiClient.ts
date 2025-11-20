@@ -56,8 +56,10 @@ export class GeminiClient {
     // console.log("Token Number: ", countTokensResponse.totalTokens);
 
     const SYSTEM_INSTRUCTION: ContentUnion = [
-      "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly with users.",
-      "If user asks questions about the current webpage, call the scrapePage action using the provided pageUrl.",
+      "You are SafeGPT. You have access to a tool called 'scrapePage'.",
+      "IMPORTANT: The user will provide a 'Current Page URL' in the message context.",
+      "If the user asks about the current page (e.g., 'what is this page about?', 'summarize this'), you MUST call 'scrapePage' and pass that EXACT URL as the argument.",
+      "Do NOT say you cannot access the URL. Use the tool to read it.",
     ];
 
     const functionDeclarations: FunctionDeclaration[] = [
@@ -95,13 +97,15 @@ export class GeminiClient {
         parts: [
           {
             text: `
-              پیام کاربر:
-              ${options.prompt}
+          CONTEXT_DATA:
+          Current Page URL: "${options.pageUrl ?? ""}"
 
-              آدرس صفحه فعلی کاربر:
-              ${options.pageUrl ?? "unknown"}
-              اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
-          `,
+          USER_QUERY:
+          ${options.prompt}
+          
+          Instructions:
+          If the query requires reading the page, call scrapePage with the URL provided in CONTEXT_DATA.
+        `,
           },
         ],
       },
