@@ -1,4 +1,13 @@
-import { GoogleGenAI, Type, Part } from "@google/genai";
+import {
+  GoogleGenAI,
+  Type,
+  Part,
+  FunctionDeclaration,
+  ToolListUnion,
+  ContentUnion,
+  ContentListUnion,
+  GenerateContentConfig,
+} from "@google/genai";
 import { scrapePage } from "../utils";
 
 /* ---------- TYPES ---------- */
@@ -41,62 +50,71 @@ export class GeminiClient {
   async generateText(options: GenerateOptions): Promise<void> {
     const model = options.model ?? "gemini-2.5-flash-lite";
 
-    const SYSTEM_INSTRUCTION = [
-      "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly with users.",
-      "If user asks questions about the current webpage, call the scrapePage action using the provided pageUrl.",
-    ];
-
     // const countTokensResponse = await this.client.models.countTokens({
     //   model: model,
     //   contents: options.prompt,
     // });
     // console.log("Token Number: ", countTokensResponse.totalTokens);
+
+    const SYSTEM_INSTRUCTION: ContentUnion = [
+      "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly with users.",
+      "If user asks questions about the current webpage, call the scrapePage action using the provided pageUrl.",
+    ];
+
+    const functionDeclarations: FunctionDeclaration[] = [
+      {
+        name: "scrapePage",
+        description: "Scrape webpage HTML and return readable text",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            url: { type: Type.STRING },
+          },
+          required: ["url"],
+        },
+      },
+      // add more actions
+    ];
+
+    const tools: ToolListUnion = [
+      {
+        functionDeclarations,
+      },
+    ];
+
+    const config: GenerateContentConfig = {
+      tools: tools,
+      systemInstruction: SYSTEM_INSTRUCTION,
+      temperature: options.temperature,
+      topP: options.topP,
+      maxOutputTokens: options.maxOutputTokens,
+    };
+
+    const firstContent: ContentListUnion = [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `
+              پیام کاربر:
+              ${options.prompt}
+
+              آدرس صفحه فعلی کاربر:
+              ${options.pageUrl ?? "unknown"}
+
+              اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
+          `,
+          },
+        ],
+      },
+    ];
+
     try {
       /* ---------- First Step Call the Model ---------- */
       const response = await this.client.models.generateContent({
         model,
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: "scrapePage",
-                  description: "Scrape webpage HTML and return readable text",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      url: { type: Type.STRING },
-                    },
-                    required: ["url"],
-                  },
-                },
-                // add more actions
-              ],
-            },
-          ],
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: options.temperature,
-          topP: options.topP,
-          maxOutputTokens: options.maxOutputTokens,
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `
-                      پیام کاربر:
-                      ${options.prompt}
-
-                      آدرس صفحه فعلی کاربر:
-                      ${options.pageUrl ?? "unknown"}
-
-                      اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
-                  `,
-              },
-            ],
-          },
-        ],
+        config,
+        contents: firstContent,
       });
 
       console.log("First AI response: ", response);
@@ -113,7 +131,11 @@ export class GeminiClient {
         if (!actionName)
           throw new Error(`Unknown function call: ${actionName}`);
 
+        console.log("This action called", actionName);
+
         const toolResult = await this.executeAction(actionName, actionArgs);
+
+        console.log("tool result isJ: ", toolResult);
 
         const functionResponsePart = {
           name: actionName,
@@ -122,7 +144,7 @@ export class GeminiClient {
           },
         };
 
-        const followupContents = [
+        const followupContents: ContentListUnion = [
           {
             role: "function",
             parts: [
@@ -136,31 +158,11 @@ export class GeminiClient {
         // send follow-up to model
         const stream = await this.client.models.generateContentStream({
           model,
-          config: {
-            tools: [
-              {
-                functionDeclarations: [
-                  {
-                    name: "scrapePage",
-                    description: "Scrape webpage HTML and return readable text",
-                    parameters: {
-                      type: Type.OBJECT,
-                      properties: {
-                        url: { type: Type.STRING },
-                      },
-                      required: ["url"],
-                    },
-                  },
-                ],
-              },
-            ],
-            systemInstruction: SYSTEM_INSTRUCTION,
-            temperature: options.temperature,
-            topP: options.topP,
-            maxOutputTokens: options.maxOutputTokens,
-          },
+          config,
           contents: followupContents,
         });
+
+        console.log("Follow up stream call: ", stream);
 
         for await (const event of stream) {
           const text = event?.candidates?.[0]?.content?.parts
@@ -176,12 +178,7 @@ export class GeminiClient {
       /* ---------- If there is no action ---------- */
       const stream = await this.client.models.generateContentStream({
         model,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          temperature: options.temperature,
-          topP: options.topP,
-          maxOutputTokens: options.maxOutputTokens,
-        },
+        config,
         contents: [
           {
             role: "user",
@@ -191,6 +188,7 @@ export class GeminiClient {
       });
 
       for await (const event of stream) {
+        console.log("event of first stream is: ", event);
         const text = event?.candidates?.[0]?.content?.parts
           ?.map((p) => p.text)
           ?.join("");
