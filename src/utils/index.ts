@@ -33,7 +33,7 @@ export function stripHtml(html: string) {
 
 export function buildHistoryPrompt(messages: IMessage[]) {
   return messages
-    .map((m) => `${m.role === "USER" ? "کاربر" : "دستیار"}: ${m.text}`)
+    .map((m) => `${m.role === "USER" ? "user" : "model"}: ${m.text}`)
     .join("\n");
 }
 
