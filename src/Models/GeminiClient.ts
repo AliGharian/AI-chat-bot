@@ -143,7 +143,7 @@ export class GeminiClient {
         // باید کل تاریخچه قبلی را هم بفرستید
 
         const followupContents: ContentListUnion = [
-          // <--- این خط بسیار مهم است (پیام اولیه کاربر)
+          ...firstContent,
           {
             role: "model",
             parts: [
