@@ -1,7 +1,6 @@
 import {
   GoogleGenAI,
   Type,
-  Part,
   FunctionDeclaration,
   ToolListUnion,
   ContentUnion,
@@ -146,7 +145,7 @@ export class GeminiClient {
 
         const followupContents: ContentListUnion = [
           {
-            role: "function",
+            role: "model",
             parts: [
               {
                 functionResponse: functionResponsePart,
