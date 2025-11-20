@@ -95,10 +95,12 @@ export class GeminiClient {
         parts: [
           {
             text: `
+              پیام کاربر:
               ${options.prompt}
 
               آدرس صفحه فعلی کاربر:
               ${options.pageUrl ?? "unknown"}
+              اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
           `,
           },
         ],
