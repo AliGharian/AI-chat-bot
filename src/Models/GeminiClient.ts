@@ -95,13 +95,10 @@ export class GeminiClient {
         parts: [
           {
             text: `
-              پیام کاربر:
               ${options.prompt}
 
               آدرس صفحه فعلی کاربر:
               ${options.pageUrl ?? "unknown"}
-
-              اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
           `,
           },
         ],
@@ -142,8 +139,11 @@ export class GeminiClient {
             result: toolResult,
           },
         };
+        // --- FIX IS HERE ---
+        // باید کل تاریخچه قبلی را هم بفرستید
 
         const followupContents: ContentListUnion = [
+          // <--- این خط بسیار مهم است (پیام اولیه کاربر)
           {
             role: "model",
             parts: [
