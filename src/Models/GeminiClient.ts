@@ -47,7 +47,7 @@ export class GeminiClient {
 
   /* ----------   Send Message + Action Manage + Stream   ---------- */
   async generateText(options: GenerateOptions): Promise<void> {
-    const model = options.model ?? "gemini-2.5-pro";
+    const model = options.model ?? "gemini-2.5-flash";
 
     // const countTokensResponse = await this.client.models.countTokens({
     //   model: model,
