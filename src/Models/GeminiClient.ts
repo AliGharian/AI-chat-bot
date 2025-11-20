@@ -148,6 +148,14 @@ export class GeminiClient {
             role: "model",
             parts: [
               {
+                functionCall: actionCall,
+              },
+            ],
+          },
+          {
+            role: "function",
+            parts: [
+              {
                 functionResponse: functionResponsePart,
               } as any,
             ],
