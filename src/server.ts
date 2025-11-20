@@ -155,15 +155,7 @@ app.post("/api/stream", async (req, res) => {
   }
 
   const finalPrompt = `
-          این چت‌ سابق بین کاربر و دستیار:
-
-          ${historyText}
-
-          --------------------
-          سؤال جدید کاربر:
           ${prompt}
-          --------------------
-
           ${
             url
               ? `کاربر لینک داده: ${url}
