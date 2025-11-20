@@ -1,12 +1,4 @@
-import {
-  GoogleGenAI,
-  Type,
-  FunctionDeclaration,
-  ToolListUnion,
-  ContentUnion,
-  ContentListUnion,
-  GenerateContentConfig,
-} from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { scrapePage } from "../utils";
 
 /* ---------- TYPES ---------- */
@@ -22,7 +14,7 @@ interface GenerateOptions {
   onError?: (err: any) => void;
 }
 
-/* ---------- Gemini Client With Actions ---------- */
+/* ---------- GeminiClient (robust) ---------- */
 export class GeminiClient {
   private client: GoogleGenAI;
 
@@ -34,183 +26,214 @@ export class GeminiClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /* ---------- Define Actions ---------- */
-
-  /* ---------- Action Execution ---------- */
+  /* ---------- Execute local actions/tools ---------- */
   private async executeAction(name: string, args: any) {
     if (name === "scrapePage") {
-      return await scrapePage(args.url);
+      // args may be string or object depending on model
+      const url = typeof args === "string" ? args : args?.url;
+      return await scrapePage(url);
     }
-
     throw new Error("Unknown action: " + name);
   }
 
-  /* ----------   Send Message + Action Manage + Stream   ---------- */
+  /* ---------- Main generateText ---------- */
   async generateText(options: GenerateOptions): Promise<void> {
-    const model = options.model ?? "gemini-2.5-flash-lite";
+    const model = options.model ?? "gemini-2.5-flash";
 
-    // const countTokensResponse = await this.client.models.countTokens({
-    //   model: model,
-    //   contents: options.prompt,
-    // });
-    // console.log("Token Number: ", countTokensResponse.totalTokens);
-
-    const SYSTEM_INSTRUCTION: ContentUnion = [
-      "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly with users.",
-      "If user asks questions about the current webpage, call the scrapePage action using the provided pageUrl.",
+    const SYSTEM_INSTRUCTION = [
+      "You are SafeGPT, the official assistant of SafeBroker.org. Talk friendly and concise.",
+      "If the user asks about the current webpage, call scrapePage with {url}.",
     ];
 
-    const functionDeclarations: FunctionDeclaration[] = [
+    const toolDeclarations = [
       {
-        name: "scrapePage",
-        description: "Scrape webpage HTML and return readable text",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            url: { type: Type.STRING },
-          },
-          required: ["url"],
-        },
-      },
-      // add more actions
-    ];
-
-    const tools: ToolListUnion = [
-      {
-        functionDeclarations,
-      },
-    ];
-
-    const config: GenerateContentConfig = {
-      tools: tools,
-      systemInstruction: SYSTEM_INSTRUCTION,
-      temperature: options.temperature,
-      topP: options.topP,
-      maxOutputTokens: options.maxOutputTokens,
-    };
-
-    const firstContent: ContentListUnion = [
-      {
-        role: "user",
-        parts: [
+        functionDeclarations: [
           {
-            text: `
-              پیام کاربر:
-              ${options.prompt}
-
-              آدرس صفحه فعلی کاربر:
-              ${options.pageUrl ?? "unknown"}
-
-              اگر سوال مربوط به صفحه بود باید اکشن scrapePage را صدا بزنی.
-          `,
+            name: "scrapePage",
+            description: "Scrape webpage HTML and return readable plain text.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                url: { type: Type.STRING },
+              },
+              required: ["url"],
+            },
           },
         ],
       },
     ];
 
-    try {
-      /* ---------- First Step Call the Model ---------- */
-      const response = await this.client.models.generateContent({
-        model,
-        config,
-        contents: firstContent,
-      });
+    let attempts = 0;
+    const maxAttempts = 5;
 
-      console.log("First AI response: ", response);
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        console.log("GeminiClient: attempt", attempts);
 
-      /* ---------- if needs action ---------- */
-      const actionCall = response?.candidates?.[0]?.content?.parts?.find(
-        (p: any) => p.functionCall
-      )?.functionCall;
+        // COUNT TOKENS (optional)
+        try {
+          const t = await this.client.models.countTokens({
+            model,
+            contents: options.prompt,
+          });
+          console.log("Token count:", t.totalTokens);
+        } catch (e) {
+          // not fatal; continue
+        }
 
-      if (actionCall) {
-        const actionName = actionCall.name;
-        const actionArgs = actionCall.args;
+        /* ---------- STEP 1: initial request (user) ---------- */
+        const firstResponse = await this.client.models.generateContent({
+          model,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            tools: toolDeclarations,
+            temperature: options.temperature,
+            topP: options.topP,
+            maxOutputTokens: options.maxOutputTokens,
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: options.prompt }],
+            },
+          ],
+        });
 
-        if (!actionName)
-          throw new Error(`Unknown function call: ${actionName}`);
+        // Extract potential functionCall from model output
+        const callPart = firstResponse.candidates?.[0]?.content?.parts?.find(
+          (p: any) => p.functionCall
+        );
 
-        console.log("This action called", actionName);
+        // If no function call, stream normal reply directly (user -> model streaming)
+        if (!callPart) {
+          const stream = await this.client.models.generateContentStream({
+            model,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: options.temperature,
+              topP: options.topP,
+              maxOutputTokens: options.maxOutputTokens,
+            },
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: options.prompt }],
+              },
+            ],
+          });
 
+          for await (const ev of stream) {
+            const text = ev?.candidates?.[0]?.content?.parts
+              ?.map((p: any) => p.text)
+              ?.join("");
+            if (text && options.onData) options.onData(text);
+          }
+
+          if (options.onEnd) options.onEnd();
+          return;
+        }
+
+        /* ---------- STEP 2: we have a functionCall from the model ---------- */
+        const rawFunctionCall = callPart.functionCall;
+        const actionName = rawFunctionCall?.name;
+        let actionArgs = rawFunctionCall?.args;
+
+        // args sometimes arrive as a stringified JSON
+        if (typeof actionArgs === "string") {
+          try {
+            actionArgs = JSON.parse(actionArgs);
+          } catch (e) {
+            // leave as string if not JSON
+          }
+        }
+
+        if (!actionName) throw new Error("Invelid action name");
+        
+        // Execute the action locally
         const toolResult = await this.executeAction(actionName, actionArgs);
 
-        console.log("tool result is: ", toolResult);
+        // Make sure result is JSON-serializable
+        let serializableResult: any;
+        try {
+          JSON.stringify(toolResult);
+          serializableResult = toolResult;
+        } catch {
+          serializableResult = String(toolResult);
+        }
 
-        const functionResponsePart = {
-          name: actionName,
-          response: {
-            result: toolResult,
-          },
-        };
+        /* ---------- STEP 3: FOLLOW-UP — obey Gemini parity rule ----------
+           To satisfy "function response turn comes immediately after a function call turn"
+           we include two consecutive content entries:
+           1) role: "model" with the exact functionCall the model produced
+           2) role: "function" with functionResponse containing the tool result
+           This preserves the conversational turn order and avoids the 400 error.
+        ------------------------------------------------------------------*/
 
-        const followupContents: ContentListUnion = [
+        const followupContents = [
+          // Recreate the model turn that did the functionCall (important for parity)
           {
             role: "model",
             parts: [
               {
-                functionCall: actionCall,
-              },
+                functionCall: rawFunctionCall,
+              } as any,
             ],
           },
+          // Immediately follow with the function response turn
           {
             role: "function",
             parts: [
               {
-                functionResponse: functionResponsePart,
+                functionResponse: {
+                  name: actionName,
+                  response: { result: serializableResult },
+                },
               } as any,
             ],
           },
         ];
 
-        console.log("Follow up content is: ", followupContents);
-
-        // send follow-up to model
-        const stream = await this.client.models.generateContentStream({
+        // Now stream the model's continuation (the assistant's final answer)
+        const followStream = await this.client.models.generateContentStream({
           model,
-          config,
+          // NOTE: we intentionally avoid adding additional user/system messages
+          // The config object may omit tools/system to reduce risk of parity issues.
+          config: {
+            // In some SDK/server setups, re-declaring tools is optional. If your
+            // deployment requires it, add toolDeclarations here.
+            temperature: options.temperature,
+            topP: options.topP,
+            maxOutputTokens: options.maxOutputTokens,
+          },
           contents: followupContents,
         });
 
-        console.log("Follow up stream call: ", stream);
-
-        for await (const event of stream) {
-          const text = event?.candidates?.[0]?.content?.parts
-            ?.map((p) => p.text)
+        for await (const ev of followStream) {
+          const text = ev?.candidates?.[0]?.content?.parts
+            ?.map((p: any) => p.text)
             ?.join("");
           if (text && options.onData) options.onData(text);
         }
 
         if (options.onEnd) options.onEnd();
         return;
+      } catch (err: any) {
+        // retry 503
+        const code = err?.status || err?.code;
+        console.warn("GeminiClient error:", code || err?.message || err);
+        if ((code === 503 || code === "503") && attempts < maxAttempts) {
+          const waitMs = attempts * 1000;
+          console.warn(`503 — retrying after ${waitMs} ms`);
+          await this.wait(waitMs);
+          continue;
+        }
+
+        if (options.onError) options.onError(err);
+        else console.error("GeminiClient final error:", err);
+
+        return;
       }
-
-      /* ---------- If there is no action ---------- */
-      const stream = await this.client.models.generateContentStream({
-        model,
-        config,
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: options.prompt }],
-          },
-        ],
-      });
-
-      console.log("first stream is: ", stream);
-      for await (const event of stream) {
-        const text = event?.candidates?.[0]?.content?.parts
-          ?.map((p) => p.text)
-          ?.join("");
-
-        if (text && options.onData) options.onData(text);
-      }
-
-      if (options.onEnd) options.onEnd();
-      return;
-    } catch (err: any) {
-      if (options.onError) options.onError(err);
-      else console.error("Gemini stream error:", err);
-      return;
-    }
-  }
+    } // while
+  } // generateText
 }
