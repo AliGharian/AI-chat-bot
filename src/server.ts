@@ -180,7 +180,7 @@ app.post("/api/stream", async (req, res) => {
   let streamEnded = false;
   let botFullText = "";
 
-  const result = await messageRepository.create({
+  await messageRepository.create({
     user_id: null,
     conversation_id: null,
     sessionId,
@@ -188,8 +188,6 @@ app.post("/api/stream", async (req, res) => {
     text: prompt,
     createdAt: new Date(),
   });
-
-  console.log("Result is: ", result);
 
   const fallbackTimeout = setTimeout(() => {
     if (!streamEnded) {
@@ -249,8 +247,6 @@ app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
 });
 
-
-
 // const GenerateContentResponse =  {
 //     sdkHttpResponse: {
 //       headers: {
@@ -303,8 +299,6 @@ app.listen(PORT, () => {
 //     status: 400
 //   }
 
-
-
 // const StreamError: ApiError = {"error":{"message":"{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 10, model: gemini-2.5-flash\\nPlease retry in 22.421756398s.\",\n    \"status\": \"RESOURCE_EXHAUSTED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Learn more about Gemini API quotas\",\n            \"url\": \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.QuotaFailure\",\n        \"violations\": [\n          {\n            \"quotaMetric\": \"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\n            \"quotaId\": \"GenerateRequestsPerMinutePerProjectPerModel-FreeTier\",\n            \"quotaDimensions\": {\n              \"model\": \"gemini-2.5-flash\",\n              \"location\": \"global\"\n            },\n            \"quotaValue\": \"10\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.RetryInfo\",\n        \"retryDelay\": \"22s\"\n      }\n    ]\n  }\n}\n","code":429,"status":"Too Many Requests"}}
 //       at throwErrorIfNotOK (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:11430:30)
 //       at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
@@ -312,4 +306,3 @@ app.listen(PORT, () => {
 //       at async Models.generateContentStream (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:12572:24) {
 //     status: 429
 //   }
-

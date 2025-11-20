@@ -135,7 +135,7 @@ export class GeminiClient {
 
         const toolResult = await this.executeAction(actionName, actionArgs);
 
-        console.log("tool result isJ: ", toolResult);
+        console.log("tool result is: ", toolResult);
 
         const functionResponsePart = {
           name: actionName,
@@ -154,6 +154,8 @@ export class GeminiClient {
             ],
           },
         ];
+
+        console.log("Follow up content is: ", followupContents);
 
         // send follow-up to model
         const stream = await this.client.models.generateContentStream({
@@ -187,8 +189,8 @@ export class GeminiClient {
         ],
       });
 
+      console.log("first stream is: ", stream);
       for await (const event of stream) {
-        console.log("event of first stream is: ", event);
         const text = event?.candidates?.[0]?.content?.parts
           ?.map((p) => p.text)
           ?.join("");
