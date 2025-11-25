@@ -43,7 +43,7 @@ export class GeminiClient {
     }
 
     if (name === "getForexEconomicNews") {
-      const { startDate, endDate } = args;
+      const { countryCodes, startDate, endDate } = args;
 
       // تبدیل تاریخ‌ها به فرمت UTC با T00:00:00.000Z
       const fromDate = new Date(`${startDate}T00:00:00.000Z`).toISOString();
@@ -52,6 +52,7 @@ export class GeminiClient {
       const url = new URL("https://economic-calendar.tradingview.com/events");
 
       // تنظیم پارامترها در URL
+      url.searchParams.set("countries", countryCodes.toUpperCase());
       url.searchParams.set("from", fromDate);
       url.searchParams.set("to", toDate);
 
@@ -143,14 +144,13 @@ export class GeminiClient {
       `
       [CONTEXTUAL_RULES]
       **تاریخ امروز به فرمت YYYY-MM-DD عبارت است از: ${currentDateString}**
+       **قوانین فراخوانی تابع getForexEconomicNews:**
+      1. تو باید عبارت های زمانی نسبی (مثل "این هفته" یا "هفته آینده") را با استفاده از تاریخ امروز، به محدوده تاریخ دقیق YYYY-MM-DD تبدیل کنی. شروع هفته را روز **دوشنبه** در نظر بگیر.
+      2. کدهای ارز (مثل یورو، دلار) را به کدهای کشور زیر نگاشت کن و به پارامتر countryCodes بفرست:
+        یورو/EUR -> EU | دلار آمریکا/USD -> US | پوند/GBP -> GB | ین/JPY -> JP | دلار کانادا/CAD -> CA | دلار استرالیا/AUD -> AU | فرانک سوئیس/CHF -> CH | دلار نیوزیلند/NZD -> NZ.
+      [/CONTEXTUAL_RULES]
       `,
     ];
-
-    //  **قوانین فراخوانی تابع getForexEconomicNews:**
-    //   1. تو باید عبارت های زمانی نسبی (مثل "این هفته" یا "هفته آینده") را با استفاده از تاریخ امروز، به محدوده تاریخ دقیق YYYY-MM-DD تبدیل کنی. شروع هفته را روز **دوشنبه** در نظر بگیر.
-    //   2. کدهای ارز (مثل یورو، دلار) را به کدهای کشور زیر نگاشت کن و به پارامتر countryCodes بفرست:
-    //     یورو/EUR -> EU | دلار آمریکا/USD -> US | پوند/GBP -> GB | ین/JPY -> JP | دلار کانادا/CAD -> CA | دلار استرالیا/AUD -> AU | فرانک سوئیس/CHF -> CH | دلار نیوزیلند/NZD -> NZ.
-    //   [/CONTEXTUAL_RULES]
 
     const functionDeclarations: FunctionDeclaration[] = [
       {
@@ -171,6 +171,11 @@ export class GeminiClient {
         parameters: {
           type: Type.OBJECT,
           properties: {
+            countryCodes: {
+              type: Type.STRING,
+              description:
+                "A comma-separated string of country/currency codes (e.g., 'US,EU,JP,GB') mapped from the user's request.",
+            },
             startDate: {
               type: Type.STRING,
               description:
