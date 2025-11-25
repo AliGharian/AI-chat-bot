@@ -76,7 +76,7 @@ export class GeminiClient {
         const data = await response.json();
 
         // تنها اطلاعات کلیدی را برای مدل برگردانید
-        const simplifiedEvents = data.events.map((event: any) => ({
+        const simplifiedEvents = data.result.map((event: any) => ({
           id: event.id,
           date: event.date,
           country: event.country,
