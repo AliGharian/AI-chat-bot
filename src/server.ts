@@ -142,8 +142,6 @@ app.post("/api/stream", async (req, res) => {
     { createdAt: -1 }
   );
 
-  console.log("last messages is: ", lastMessages);
-
   const historyText = buildHistoryPrompt(lastMessages.reverse());
 
   const url = extractUrl(prompt);
@@ -159,8 +157,6 @@ app.post("/api/stream", async (req, res) => {
       console.log("HTML extracted length:", pageText.length);
     }
   }
-
-  console.log("app history is: ", historyText);
 
   const finalPrompt = `
           این چت‌ سابق بین کاربر و دستیار:
