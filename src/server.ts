@@ -92,7 +92,7 @@ app.get("/api/messages", async (req, res) => {
   try {
     const sessionId = req.query.sessionId as string;
 
-    if (!sessionId) {
+    if (!sessionId || sessionId == null) {
       return res.status(400).json({ error: "sessionId is required" });
     }
 
@@ -130,6 +130,10 @@ app.post("/api/stream", async (req, res) => {
       .json({ error: "Prompt is required and must be a string." });
   }
 
+  if (!sessionId || sessionId == null) {
+    return res.status(400).json({ error: "sessionId is required" });
+  }
+
   const lastMessages = await messageRepository.findAll(
     { sessionId },
     10,
@@ -153,6 +157,8 @@ app.post("/api/stream", async (req, res) => {
       console.log("HTML extracted length:", pageText.length);
     }
   }
+
+  console.log("app history is: ", historyText);
 
   const finalPrompt = `
           این چت‌ سابق بین کاربر و دستیار:
