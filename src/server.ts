@@ -134,7 +134,7 @@ app.post("/api/stream", async (req, res) => {
     return res.status(400).json({ error: "sessionId is required" });
   }
 
-  const lastMessages = await messageRepository.findAll(
+  const lastMessages: IMessage[] = await messageRepository.findAll(
     { sessionId },
     10,
     0,
@@ -144,7 +144,7 @@ app.post("/api/stream", async (req, res) => {
 
   console.log("last messages is: ", lastMessages);
 
-  const historyText = buildHistoryPrompt(lastMessages);
+  const historyText = buildHistoryPrompt(lastMessages.reverse());
 
   const url = extractUrl(prompt);
 
