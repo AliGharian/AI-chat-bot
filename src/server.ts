@@ -109,7 +109,7 @@ app.get("/api/messages", async (req, res) => {
     return res.status(200).json({
       sessionId,
       count: messages.length,
-      messages,
+      messages: messages.reverse(),
     });
   } catch (error) {
     res.status(500).json({ error: "Internal server error." });
