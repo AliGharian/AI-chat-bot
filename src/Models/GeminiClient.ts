@@ -42,6 +42,65 @@ export class GeminiClient {
       return await scrapePage(args.url);
     }
 
+    if (name === "getForexEconomicNews") {
+      const { startDate, endDate } = args;
+
+      // تبدیل تاریخ‌ها به فرمت UTC با T00:00:00.000Z
+      const fromDate = new Date(`${startDate}T00:00:00.000Z`).toISOString();
+      const toDate = new Date(`${endDate}T23:59:59.999Z`).toISOString(); // تا پایان روز
+
+      const url = new URL("https://economic-calendar.tradingview.com/events");
+
+      // تنظیم پارامترها در URL
+      url.searchParams.set("from", fromDate);
+      url.searchParams.set("to", toDate);
+
+      try {
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            // هدر Origin مورد نیاز تریدینگ‌ویو
+            Origin: "https://www.tradingview.com",
+            "User-Agent": "Mozilla/5.0 (Custom Agent for SafeBroker)",
+          },
+        });
+
+        if (!response.ok) {
+          // اگر پاسخ موفقیت آمیز نبود
+          return {
+            success: false,
+            result: `Error fetching news: Status ${response.status} - ${response.statusText}`,
+          };
+        }
+
+        const data = await response.json();
+
+        // تنها اطلاعات کلیدی را برای مدل برگردانید
+        const simplifiedEvents = data.events.map((event: any) => ({
+          id: event.id,
+          date: event.date,
+          country: event.country,
+          title: event.title,
+          importance: event.importance, // Low, Medium, High
+          actual: event.actual,
+          forecast: event.forecast,
+          previous: event.previous,
+        }));
+
+        // نتیجه را به Gemini برگردانید تا خلاصه کند
+        return {
+          success: true,
+          result: JSON.stringify(simplifiedEvents),
+        };
+      } catch (error: any) {
+        console.error("TradingView API call failed:", error);
+        return {
+          success: false,
+          result: `An exception occurred during the API call: ${error.message}`,
+        };
+      }
+    }
+
     throw new Error("Unknown action: " + name);
   }
 
@@ -81,6 +140,27 @@ export class GeminiClient {
             url: { type: Type.STRING },
           },
           required: ["url"],
+        },
+      },
+      {
+        name: "getForexEconomicNews",
+        description:
+          "Fetches economic calendar events from TradingView for specific countries and date ranges.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            startDate: {
+              type: Type.STRING,
+              description:
+                "The start date for the news fetch in ISO 8601 format (e.g., 'YYYY-MM-DD').",
+            },
+            endDate: {
+              type: Type.STRING,
+              description:
+                "The end date for the news fetch in ISO 8601 format (e.g., 'YYYY-MM-DD').",
+            },
+          },
+          required: ["startDate", "endDate"],
         },
       },
       // add more actions
