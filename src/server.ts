@@ -136,7 +136,7 @@ app.post("/api/stream", async (req, res) => {
 
   const lastMessages: IMessage[] = await messageRepository.findAll(
     { sessionId },
-    10,
+    20,
     0,
     undefined,
     { createdAt: -1 }
