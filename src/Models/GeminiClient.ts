@@ -36,10 +36,69 @@ export class GeminiClient {
 
   /* ---------- Define Actions ---------- */
 
+  /* ---------- Define Actions ---------- */
+  // 👈 این تابع جدید را اضافه کنید
+  private async getAssetPrice(symbol: string) {
+    const apiUrl = "https://api.forexcalcs.com/prices.json";
+    try {
+      const response = await fetch(apiUrl);
+
+      if (!response.ok) {
+        return {
+          success: false,
+          result: `Error fetching price data: Status ${response.status}`,
+        };
+      }
+
+      const data = await response.json();
+
+      // طلا در این API با نماد "XAU/USD" یا "Gold/USD" مشخص نیست،
+      // اما فرض می‌کنیم که API شما حاوی نماد مورد نظر برای اونس طلا باشد.
+      // اگر نماد دقیق "XAU/USD" در لیست باشد، از آن استفاده می‌کنیم.
+      // اگرچه در نمونه JSON شما وجود ندارد، اما برای منطق، آن را اضافه می‌کنیم.
+      const asset = data.currencyPairs.find(
+        (pair: any) =>
+          pair.SymbolName.toUpperCase() === symbol.toUpperCase() ||
+          pair.DisplaySymbolName.toUpperCase() === symbol.toUpperCase()
+      );
+
+      if (asset) {
+        return {
+          success: true,
+          result: JSON.stringify({
+            SymbolName: asset.SymbolName,
+            SymbolRate: asset.SymbolRate,
+            QuoteCurrency: asset.QuoteCurrency,
+            FullName: asset.FullName,
+          }),
+        };
+      }
+
+      return {
+        success: false,
+        result: `Asset not found for symbol: ${symbol}. Available pairs are: ${data.currencyPairs
+          .map((p: any) => p.SymbolName)
+          .join(", ")}`,
+      };
+    } catch (error: any) {
+      console.error("Asset price API call failed:", error);
+      return {
+        success: false,
+        result: `An exception occurred during the API call: ${error.message}`,
+      };
+    }
+  }
   /* ---------- Action Execution ---------- */
   private async executeAction(name: string, args: any) {
     if (name === "scrapePage") {
       return await scrapePage(args.url);
+    }
+
+    if (name === "getAssetPrice") {
+      // 👈 شرط جدید برای فراخوانی API قیمت
+      // برای اونس طلا، نماد استاندارد XAU/USD است
+      const symbol = args.symbol || "XAU/USD";
+      return await this.getAssetPrice(symbol);
     }
 
     if (name === "getForexEconomicNews") {
@@ -162,6 +221,22 @@ export class GeminiClient {
             url: { type: Type.STRING },
           },
           required: ["url"],
+        },
+      },
+      {
+        name: "getAssetPrice",
+        description:
+          "Fetches the current real-time price for a specific asset symbol, like 'XAU/USD' for Gold Ounce (Oz) in USD.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            symbol: {
+              type: Type.STRING,
+              description:
+                "The symbol for the asset (e.g., 'XAU/USD' for Gold, 'EUR/USD' for Euro/Dollar). Default to 'XAU/USD' if the user asks about the price of gold.",
+            },
+          },
+          required: ["symbol"],
         },
       },
       {
