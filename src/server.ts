@@ -11,6 +11,7 @@ import {
   fetchPageContent,
   stripHtml,
 } from "./utils";
+import { runQASystem } from "./embedding/rag";
 dotenv.config();
 
 var cors = require("cors");
@@ -239,6 +240,56 @@ app.post("/api/stream", async (req, res) => {
     console.error("Gemini API error:", err);
     streamEnded = true;
     clearTimeout(fallbackTimeout);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error." });
+    } else if (!res.writableEnded) {
+      res.end("❌ خطا در پردازش درخواست.\n");
+    }
+  }
+});
+
+app.post("/api/chat", async (req, res) => {
+  console.log("Chat api called");
+  const { prompt, sessionId, pageUrl } = req.body;
+
+  console.log("Page URL: ", pageUrl);
+
+  if (!prompt || typeof prompt !== "string") {
+    return res
+      .status(400)
+      .json({ error: "Prompt is required and must be a string." });
+  }
+
+  if (!sessionId || sessionId == null) {
+    return res.status(400).json({ error: "sessionId is required" });
+  }
+
+  const lastMessages: IMessage[] = await messageRepository.findAll(
+    { sessionId },
+    20,
+    0,
+    undefined,
+    { createdAt: -1 }
+  );
+
+  const historyText = buildHistoryPrompt(lastMessages.reverse());
+
+  const finalPrompt = `
+          این چت‌ سابق بین کاربر و دستیار:
+
+          ${historyText}
+
+          --------------------
+          سؤال جدید کاربر:
+          ${prompt}
+          --------------------
+          `;
+
+  try {
+    const result = await runQASystem(prompt);
+    return res.status(200).json({ result });
+  } catch (err: any) {
+    console.error("Gemini API error:", err);
     if (!res.headersSent) {
       res.status(500).json({ error: "Internal server error." });
     } else if (!res.writableEnded) {
