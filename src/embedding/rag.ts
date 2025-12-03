@@ -6,10 +6,12 @@ import { MongoClient } from "mongodb";
 import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createStuffDocumentsChain } from "@langchain/classic/chains/combine_documents";
+import dotenv from "dotenv";
+dotenv.config();
 
 // Define your database constants again
 // const MONGO_URI = "mongodb://127.0.0.1:27017";
-const MONGO_URI = process.env.MONGO_URI ?? "";
+const MONGO_URI = process.env.DATABASE_URL ?? "";
 const DB_NAME = "ai-bot-db";
 const COLLECTION_NAME = "blog_vectors";
 const INDEX_NAME = "vector_index"; // The name of your Atlas Vector Search Index
