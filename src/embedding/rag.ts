@@ -8,7 +8,8 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createStuffDocumentsChain } from "@langchain/classic/chains/combine_documents";
 
 // Define your database constants again
-const MONGO_URI = "mongodb://127.0.0.1:27017";
+// const MONGO_URI = "mongodb://127.0.0.1:27017";
+const MONGO_URI = process.env.MONGO_URI ?? "";
 const DB_NAME = "ai-bot-db";
 const COLLECTION_NAME = "blog_vectors";
 const INDEX_NAME = "vector_index"; // The name of your Atlas Vector Search Index
