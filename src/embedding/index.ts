@@ -4,6 +4,8 @@ import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { fetchBlogPostsFromMongo } from "./data";
 import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { MongoClient, ObjectId } from "mongodb";
+import { createClient } from "redis";
+import { RedisVectorStore } from "@langchain/redis";
 
 /**
  * Recursively extracts text from nested 'children' arrays, handling inline formatting and nested blocks.
@@ -118,7 +120,7 @@ async function indexBlogPosts() {
     chunkOverlap: 50,
   });
 
-  const chunkedDocuments = await splitter.splitDocuments(rawDocs);
+  const chunkedDocuments: any[] = await splitter.splitDocuments(rawDocs);
 
   console.log(`Blog posts after chunking: ${chunkedDocuments.length}`);
 
@@ -131,21 +133,105 @@ async function indexBlogPosts() {
     apiKey: "AIzaSyBJpnMc7Rg02TLIH8wdaC_CSqtcF_cwivI",
   });
 
-  // 1. Connect to MongoDB
-  const client = new MongoClient("mongodb://127.0.0.1:27017");
-  await client.connect();
-  const db = client.db("bluechart-db");
+  const chunksForTesting = chunkedDocuments.slice(0, 2);
+  let vectors: number[][] = [];
+  try {
+    // تبدیل تمام داکیومنت‌ها به بردار
+    vectors = await embeddings.embedDocuments(
+      chunksForTesting.map((doc) => doc.pageContent)
+    );
+    console.log(
+      `✅ Embeddings successfully generated. Total vectors received: ${vectors.length}`
+    );
 
-  const collection: any = db.collection("blog_vectors");
-
-  const vectorStore = await MongoDBAtlasVectorSearch.fromDocuments(
-    chunkedDocuments,
-    embeddings,
-    {
-      collection: collection,
-      indexName: "vector_index",
+    if (vectors.length > 0) {
+      console.log(`First vector dimension: ${vectors[0].length}`);
+      console.log(
+        `First 5 numbers of the first vector: ${vectors[0].slice(0, 5)}`
+      );
+    } else {
+      console.error("❌ CRITICAL: Received zero vectors, aborting.");
+      return;
     }
+  } catch (error) {
+    console.error("❌ CRITICAL API ERROR during embedding generation:", error);
+    return;
+  }
+
+  // 1. Create and connect to the Redis Client
+  const redisClient: any = createClient({
+    url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+  });
+
+  redisClient.on("error", (err: any) =>
+    console.error("Redis Client Error", err)
   );
+
+  await redisClient.connect();
+  console.log("Connected to Redis Stack Server.");
+
+  // 2. Store documents and embeddings in Redis (تغییر روش ذخیره‌سازی)
+  // چون بردارها را دستی تولید کردیم، باید از متد addVectors و addDocuments استفاده کنیم.
+
+  // ایجاد یک نمونه خالی از VectorStore
+  const vectorStore = new RedisVectorStore(embeddings, {
+    redisClient: redisClient,
+    indexName: "bluechart_blog_vectors",
+  });
+
+  console.log("Vectors is: ", vectors);
+  // 3. افزودن بردارها و داکیومنت‌ها به صورت جداگانه
+  // این فرآیند جایگزین .fromDocuments می‌شود.
+  await vectorStore.addVectors(vectors, chunkedDocuments);
+
+  console.log(
+    "Blog posts have been embedded and indexed successfully in Redis."
+  );
+  await redisClient.disconnect();
+
+  //   // 1. Create and connect to the Redis Client
+  //   const redisClient: any = createClient({
+  //     url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+  //   });
+
+  //   redisClient.on("error", (err: any) =>
+  //     console.error("Redis Client Error", err)
+  //   );
+  //   await redisClient.connect();
+  //   console.log("Connected to Redis Stack Server.");
+
+  //   // 2. Store documents and embeddings in Redis
+  //   const vectorStore = await RedisVectorStore.fromDocuments(
+  //     chunkedDocuments,
+  //     embeddings,
+  //     {
+  //       redisClient: redisClient,
+  //       indexName: "bluechart_blog_vectors", // نام ایندکس برداری در Redis
+  //     }
+  //   );
+
+  //   console.log(
+  //     "Blog posts have been embedded and indexed successfully in Redis."
+  //   );
+
+  //   // 3. Disconnect Redis Client
+  //   await redisClient.disconnect();
+
+  //   // 1. Connect to MongoDB
+  //   const client = new MongoClient("mongodb://127.0.0.1:27017");
+  //   await client.connect();
+  //   const db = client.db("bluechart-db");
+
+  //   const collection: any = db.collection("blog_vectors");
+
+  //   const vectorStore = await MongoDBAtlasVectorSearch.fromDocuments(
+  //     chunkedDocuments,
+  //     embeddings,
+  //     {
+  //       collection: collection,
+  //       indexName: "vector_index",
+  //     }
+  //   );
 
   console.log("Blog posts have been embedded and indexed successfully.");
 }
