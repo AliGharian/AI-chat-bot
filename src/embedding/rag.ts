@@ -1,6 +1,7 @@
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
+import { GoogleGenAI } from "@google/genai";
 
 const apiKey = "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E";
 const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
@@ -30,27 +31,27 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
     console.log(`Searching Redis for documents similar to: "${userQuery}"...`);
 
     // 3. اجرای جستجوی تشابهی
-        const relevantDocs = await vectorStore.similaritySearch(userQuery, k);
+    const relevantDocs = await vectorStore.similaritySearch(userQuery, k);
 
-        console.log(`\n🔎 Found ${relevantDocs.length} relevant documents:`);
-        console.log(`\n🔎 Relevent docs is:  ${relevantDocs}`);
-        
-        // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
-        relevantDocs.forEach((doc, index) => {
-            
-            // 💡 اگر doc.metadata._score وجود داشت، آن را نمایش بده، در غیر این صورت "N/A"
-            const score = doc.metadata._score !== undefined 
-                ? doc.metadata._score.toFixed(4) 
-                : "N/A";
-            
-            console.log(`--- Document ${index + 1} (Score: ${score}) ---`);
-            console.log(`Title: ${doc.metadata.title}`);
-            console.log(`Slug: ${doc.metadata.slug}`);
-            // نمایش بخشی از محتوا
-            console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`); 
-        });
+    console.log(`\n🔎 Found ${relevantDocs.length} relevant documents:`);
+    console.log(`\n🔎 Relevent docs is:  ${relevantDocs}`);
 
-        return relevantDocs;
+    // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
+    relevantDocs.forEach((doc, index) => {
+      // 💡 اگر doc.metadata._score وجود داشت، آن را نمایش بده، در غیر این صورت "N/A"
+      const score =
+        doc.metadata._score !== undefined
+          ? doc.metadata._score.toFixed(4)
+          : "N/A";
+
+      console.log(`--- Document ${index + 1} (Score: ${score}) ---`);
+      console.log(`Title: ${doc.metadata.title}`);
+      console.log(`Slug: ${doc.metadata.slug}`);
+      // نمایش بخشی از محتوا
+      console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
+    });
+
+    return relevantDocs;
   } catch (error) {
     console.error("❌ ERROR DURING SEARCH:", error);
   } finally {
@@ -58,6 +59,58 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
       await redisClient.disconnect();
     }
   }
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey });
+
+function formatContext(documents: any[]): string {
+  const context = documents
+    .map((doc) => {
+      // ساختاردهی برای خوانایی بهتر توسط LLM
+      return `[TITLE: ${doc.metadata.title}]\n${doc.pageContent}\n---`;
+    })
+    .join("\n");
+
+  return context.trim();
+}
+
+export async function generateResponseWithRAG(userQuery: string) {
+  // الف. بازیابی اسناد مرتبط (گام Retrieval)
+  const relevantDocuments = await runSimilaritySearch(userQuery, 5); // 💡 ۵ سند بازیابی شد
+
+  if (!relevantDocuments || relevantDocuments.length === 0) {
+    return "متأسفانه منبع مرتبطی در پایگاه دانش ما پیدا نشد.";
+  }
+
+  // ب. فرمت‌دهی اسناد بازیابی شده به یک رشته قابل ارسال
+  const contextText = formatContext(relevantDocuments);
+
+  // پ. ساخت پرامپت نهایی (با تزریق Context)
+  const prompt = `
+        شما یک دستیار متخصص در زمینه بازارهای مالی و تحلیل تکنیکال هستید. 
+        فقط بر اساس 'CONTEXT' زیر، به 'USER_QUERY' پاسخ دهید. 
+        پاسخ شما باید جامع، محترمانه و به زبان فارسی روان باشد.
+        اگر پاسخ در 'CONTEXT' یافت نشد، بنویسید که اطلاعات کافی در دسترس نیست.
+
+        --- CONTEXT ---
+        ${contextText}
+        --- USER_QUERY ---
+        ${userQuery}
+    `;
+
+  console.log("📝 Sending final prompt to Gemini for generation...");
+
+  // ت. ارسال به LLM برای تولید پاسخ (گام Generation)
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash", // یا gemini-2.5-pro
+    contents: prompt,
+  });
+
+  // ث. استخراج و نمایش پاسخ نهایی
+  const finalAnswer = response.text;
+
+  console.log("✅ Final Answer from LLM received.");
+  return finalAnswer;
 }
 
 // // 🎯 پرسش آزمایشی شما

@@ -11,7 +11,7 @@ import {
   fetchPageContent,
   stripHtml,
 } from "./utils";
-import { runSimilaritySearch } from "./embedding/rag";
+import { generateResponseWithRAG, } from "./embedding/rag";
 dotenv.config();
 
 var cors = require("cors");
@@ -286,7 +286,7 @@ app.post("/api/chat", async (req, res) => {
           `;
 
   try {
-    const result = await runSimilaritySearch(prompt);
+    const result = await generateResponseWithRAG(prompt);
     return res.status(200).json({ result });
   } catch (err: any) {
     console.error("Gemini API error:", err);
