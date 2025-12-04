@@ -7,15 +7,9 @@ import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = "AIzaSyDmlac2OTGO1BDK08KVvLiDI5LeMcuWMDw";
-const redisPass = "ChRj72nuujSCW5z92XDVGitu";
+const apiKey = "123";
+const redisPass = "123";
 
-/**
- * Recursively extracts text from nested 'children' arrays, handling inline formatting and nested blocks.
- * This is crucial for retrieving text hidden inside elements like links or bold tags in the block structure.
- * * @param children - The children array of a block (e.g., paragraph, heading, list item).
- * @returns A concatenated string of all text nodes.
- */
 function extractTextFromChildren(children: any[]): string {
   return children
     .map((child) => {
@@ -36,14 +30,6 @@ function extractTextFromChildren(children: any[]): string {
     .join(" ");
 }
 
-/**
- * Converts the complex, block-based content array from MongoDB into a single,
- * clean raw text string suitable for the LangChain Text Splitter.
- * * This function addresses the common bug where text content is left empty
- * due to improper handling of nested JSON block types.
- * * @param contentBlocks - The 'content' array from the MongoDB document.
- * @returns The cleaned raw text.
- */
 function extractRawText(contentBlocks: any): string {
   let rawText = "";
 
@@ -88,13 +74,8 @@ function extractRawText(contentBlocks: any): string {
   return rawText.trim();
 }
 
-const BATCH_SIZE = 90; // 👈 تعیین اندازه دسته: ۹۰ سند در هر فراخوانی (کمتر از ۱۰۰)
+const BATCH_SIZE = 90;
 
-/**
- * 💡 تابع کمکی برای تقسیم آرایه‌ها به دسته‌های کوچکتر
- * @param arr - آرایه ورودی (مثل chunkedDocuments)
- * @param size - حداکثر تعداد آیتم‌ها در هر دسته
- */
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -123,21 +104,12 @@ async function indexBlogPosts() {
   // ------------------------------------------
   console.log("Starting the embedding and indexing process...");
 
-  const cleanedDocuments: string[] = blogPostData.map((post) => {
-    return extractRawText(post.content);
-  });
-
   const embeddings = new GoogleGenerativeAIEmbeddings({
     model: "text-embedding-004",
     apiKey: apiKey,
   });
 
-  const response = await ai.models.embedContent({
-    model: "text-embedding-004",
-    contents: cleanedDocuments,
-  });
-
-  console.log("First blog post data:  ", blogPostData[0].content);
+  console.log("First blog post data:  ", blogPostData[0].content); // 1.1: تولید Raw Docs
 
   const rawDocs: Document[] = blogPostData.map((post) => {
     const cleanedContent = extractRawText(post.content);
@@ -145,7 +117,7 @@ async function indexBlogPosts() {
     return new Document({
       pageContent: cleanedContent,
       metadata: {
-        id: new ObjectId(post._id.toString()),
+        id: post._id.toString(), // 💡 Object ID به string تبدیل شد
         title: post.title,
         slug: post.slug,
       },
@@ -153,11 +125,8 @@ async function indexBlogPosts() {
   });
 
   console.log(`Total raw blog posts fetched: ${rawDocs.length}`);
-  console.log("Last raw document:", rawDocs[0]);
+  console.log("Last raw document:", rawDocs[0]); // 1.2: تقسیم داکیومنت‌ها (Chunking)
 
-  // -----------------------------------------------------
-  // Step 2: Split documents into smaller chunks
-  // -----------------------------------------------------
   const splitter = new RecursiveCharacterTextSplitter({
     chunkSize: 500,
     chunkOverlap: 50,
@@ -165,11 +134,8 @@ async function indexBlogPosts() {
 
   const chunkedDocuments: any[] = await splitter.splitDocuments(rawDocs);
 
-  console.log(`Blog posts after chunking: ${chunkedDocuments.length}`);
+  console.log(`Blog posts after chunking: ${chunkedDocuments.length}`); // 1.3: آماده‌سازی Batching
 
-  // -----------------------------------------------------
-  // Step 1: Chunking and batching data
-  // -----------------------------------------------------
   const chunkedBatches = chunkArray(chunkedDocuments, BATCH_SIZE);
   let indexedCount = 0;
 
@@ -178,151 +144,30 @@ async function indexBlogPosts() {
   );
 
   const vectorStore = new RedisVectorStore(embeddings, {
-    redisClient: redisClient,
+    redisClient: redisClient, // 💡 استفاده از client بجای redisClient
     indexName: "bluechart_blog_vectors",
   });
 
   for (const batch of chunkedBatches) {
-    // 3.1: استخراج متن‌ها برای API
     const batchTexts = batch.map((doc) => doc.pageContent);
 
-    // 3.2: فراخوانی API با تعداد کم (زیر ۱۰۰)
-    // 💡 نکته: ما از متد خام ai.models.embedContent استفاده می‌کنیم چون LangChain's
-    // embedDocuments گاهی اوقات با batching مشکل دارد.
     const response: any = await ai.models.embedContent({
       model: "text-embedding-004",
       contents: batchTexts,
     });
 
-    // 3.3: تصحیح ساختار وکتورها (API response format)
     const correctedVectors = response.embeddings.map((v: any) => v.values);
 
-    // 3.4: ذخیره در Redis
     await vectorStore.addVectors(correctedVectors, batch);
 
     indexedCount += batch.length;
     console.log(
       `✅ Indexed ${indexedCount} out of ${chunkedDocuments.length} chunks. (Batch size: ${batch.length})`
     );
-
-    // تأخیر کوتاه برای جلوگیری از Rate Limiting (اختیاری)
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  console.log(
-    "✅ SUCCESS: All blog posts have been embedded and indexed successfully."
-  );
-
   await redisClient.disconnect();
-
-  // -----------------------------------------------------
-  // Step 3: Generate embeddings and store in Redis
-  // -----------------------------------------------------
-
-  // const embeddings = new GoogleGenerativeAIEmbeddings({
-  //   model: "text-embedding-004",
-  //   apiKey: apiKey,
-  // });
-
-  // const chunksForTesting = chunkedDocuments.slice(0, 2);
-  // let vectors: number[][] = [];
-  // try {
-  //   // تبدیل تمام داکیومنت‌ها به بردار
-  //   vectors = await embeddings.embedDocuments(
-  //     chunksForTesting.map((doc) => doc.pageContent)
-  //   );
-  //   console.log(
-  //     `✅ Embeddings successfully generated. Total vectors received: ${vectors.length}`
-  //   );
-
-  //   if (vectors.length > 0) {
-  //     console.log(`First vector dimension: ${vectors[0].length}`);
-  //     console.log(
-  //       `First 5 numbers of the first vector: ${vectors[0].slice(0, 5)}`
-  //     );
-  //   } else {
-  //     console.error("❌ CRITICAL: Received zero vectors, aborting.");
-  //     return;
-  //   }
-  // } catch (error) {
-  //   console.error("❌ CRITICAL API ERROR during embedding generation:", error);
-  //   return;
-  // }
-
-  // // 1. Create and connect to the Redis Client
-  // const redisClient: any = createClient({
-  //   url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
-  // });
-
-  // redisClient.on("error", (err: any) =>
-  //   console.error("Redis Client Error", err)
-  // );
-
-  // await redisClient.connect();
-  // console.log("Connected to Redis Stack Server.");
-
-  // // 2. Store documents and embeddings in Redis (تغییر روش ذخیره‌سازی)
-  // // چون بردارها را دستی تولید کردیم، باید از متد addVectors و addDocuments استفاده کنیم.
-
-  // // ایجاد یک نمونه خالی از VectorStore
-  // const vectorStore = new RedisVectorStore(embeddings, {
-  //   redisClient: redisClient,
-  //   indexName: "bluechart_blog_vectors",
-  // });
-
-  // console.log("Vectors is: ", vectors);
-  // // 3. افزودن بردارها و داکیومنت‌ها به صورت جداگانه
-  // // این فرآیند جایگزین .fromDocuments می‌شود.
-  // await vectorStore.addVectors(vectors, chunkedDocuments);
-
-  // console.log(
-  //   "Blog posts have been embedded and indexed successfully in Redis."
-  // );
-  // await redisClient.disconnect();
-
-  //   // 1. Create and connect to the Redis Client
-  //   const redisClient: any = createClient({
-  //     url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
-  //   });
-
-  //   redisClient.on("error", (err: any) =>
-  //     console.error("Redis Client Error", err)
-  //   );
-  //   await redisClient.connect();
-  //   console.log("Connected to Redis Stack Server.");
-
-  //   // 2. Store documents and embeddings in Redis
-  //   const vectorStore = await RedisVectorStore.fromDocuments(
-  //     chunkedDocuments,
-  //     embeddings,
-  //     {
-  //       redisClient: redisClient,
-  //       indexName: "bluechart_blog_vectors", // نام ایندکس برداری در Redis
-  //     }
-  //   );
-
-  //   console.log(
-  //     "Blog posts have been embedded and indexed successfully in Redis."
-  //   );
-
-  //   // 3. Disconnect Redis Client
-  //   await redisClient.disconnect();
-
-  //   // 1. Connect to MongoDB
-  //   const client = new MongoClient("mongodb://127.0.0.1:27017");
-  //   await client.connect();
-  //   const db = client.db("bluechart-db");
-
-  //   const collection: any = db.collection("blog_vectors");
-
-  //   const vectorStore = await MongoDBAtlasVectorSearch.fromDocuments(
-  //     chunkedDocuments,
-  //     embeddings,
-  //     {
-  //       collection: collection,
-  //       indexName: "vector_index",
-  //     }
-  //   );
 
   console.log("Blog posts have been embedded and indexed successfully.");
 }
