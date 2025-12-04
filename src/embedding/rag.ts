@@ -3,7 +3,7 @@ import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E";
+const apiKey = "AIzaSyDDlkniK1lUMiZFb4x-F-bvROYeQfPe1ww";
 const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
 const REDIS_URL = `redis://default:${redisPass}@84.200.192.243:6379`;
 
