@@ -33,10 +33,15 @@ async function testApiDirectly() {
     console.log("Received embeddings from API:", vectors);
 
     const redisClient: any = createClient({
-      url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+      url: "redis://default:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
     });
 
+    redisClient.on("error", (err: any) =>
+      console.error("Redis Client Error", err)
+    );
+
     await redisClient.connect();
+    console.log("Connected to Redis Stack Server.");
 
     const vectorStore = new RedisVectorStore(embeddings, {
       redisClient: redisClient,
@@ -65,7 +70,7 @@ async function testApiDirectly() {
 
     console.log("Correct Vectors to be added to Redis:", correctedVectors);
 
-     await redisClient.disconnect();
+    await redisClient.disconnect();
     await vectorStore.addVectors(correctedVectors, chunkedDocuments);
   } catch (error) {
     console.error("❌ CRITICAL ERROR IN API CALL (Check Key/Quota):", error);
