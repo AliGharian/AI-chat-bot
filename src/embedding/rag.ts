@@ -39,12 +39,13 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
     // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
     relevantDocs.forEach(([doc, score], index) => {
       const formattedScore = score
-
+      
       console.log(`--- Document ${index + 1} (Score: ${formattedScore}) ---`);
-      console.log(`Title: ${doc.metadata.title}`);
-      console.log(`Slug: ${doc.metadata.slug}`);
+      console.log(`Title: ${doc}`);
+      // console.log(`Title: ${doc.metadata.title}`);
+      // console.log(`Slug: ${doc.metadata.slug}`);
       // نمایش بخشی از محتوا
-      console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
+      // console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
     });
 
     return relevantDocs;
