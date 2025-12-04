@@ -70,8 +70,8 @@ async function testApiDirectly() {
 
     console.log("Correct Vectors to be added to Redis:", correctedVectors);
 
-    await redisClient.disconnect();
     await vectorStore.addVectors(correctedVectors, chunkedDocuments);
+    await redisClient.disconnect();
   } catch (error) {
     console.error("❌ CRITICAL ERROR IN API CALL (Check Key/Quota):", error);
   }
