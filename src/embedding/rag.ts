@@ -83,11 +83,11 @@ export async function generateResponseWithRAG(userQuery: string) {
 
   const contextText = formatContext(relevantDocuments);
 
+  console.log("Context is: ", contextText);
   const prompt = `
         شما یک دستیار متخصص در زمینه بازارهای مالی و تحلیل تکنیکال هستید. 
         فقط بر اساس 'CONTEXT' زیر، به 'USER_QUERY' پاسخ دهید. 
         پاسخ شما باید جامع، محترمانه و به زبان فارسی روان باشد.
-        اگر پاسخ در 'CONTEXT' یافت نشد، بنویسید که اطلاعات کافی در دسترس نیست.
 
         --- CONTEXT ---
         ${contextText}
