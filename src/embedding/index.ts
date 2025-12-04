@@ -2,10 +2,12 @@ import { Document } from "@langchain/core/documents";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { fetchBlogPostsFromMongo } from "./data";
-import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
-import { MongoClient, ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
+import { GoogleGenAI } from "@google/genai";
+
+const apiKey = "AIzaSyDmlac2OTGO1BDK08KVvLiDI5LeMcuWMDw";
 
 /**
  * Recursively extracts text from nested 'children' arrays, handling inline formatting and nested blocks.
@@ -86,10 +88,47 @@ function extractRawText(contentBlocks: any): string {
 }
 
 async function indexBlogPosts() {
+  const ai = new GoogleGenAI({ apiKey });
+
   // Fetch blog post data from MongoDB
   const blogPostData: any[] = await fetchBlogPostsFromMongo();
+
+  // Connect to the redis
+  const redisClient: any = createClient({
+    url: "redis://default:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+  });
+
+  redisClient.on("error", (err: any) =>
+    console.error("Redis Client Error", err)
+  );
+
+  await redisClient.connect();
+  console.log("Connected to Redis Stack Server.");
   // ------------------------------------------
   console.log("Starting the embedding and indexing process...");
+
+  const cleanedDocuments: string[] = blogPostData.map((post) => {
+    return extractRawText(post.content);
+  });
+
+  const embeddings = new GoogleGenerativeAIEmbeddings({
+    model: "text-embedding-004",
+    apiKey: apiKey,
+  });
+
+  const response = await ai.models.embedContent({
+    model: "text-embedding-004",
+    contents: cleanedDocuments,
+  });
+
+  const vectors: any = response.embeddings;
+
+  console.log("Received embeddings from API:", vectors);
+
+  const vectorStore = new RedisVectorStore(embeddings, {
+    redisClient: redisClient,
+    indexName: "bluechart_blog_vectors",
+  });
 
   // -----------------------------------------------------
   // Step 1: Convert blog posts to LangChain Documents
@@ -124,70 +163,77 @@ async function indexBlogPosts() {
 
   console.log(`Blog posts after chunking: ${chunkedDocuments.length}`);
 
+  const correctedVectors = vectors.map((v: any) => v.values);
+
+  console.log("Correct Vectors to be added to Redis:", correctedVectors);
+
+  await vectorStore.addVectors(correctedVectors, chunkedDocuments);
+  await redisClient.disconnect();
+
   // -----------------------------------------------------
   // Step 3: Generate embeddings and store in Redis
   // -----------------------------------------------------
 
-  const embeddings = new GoogleGenerativeAIEmbeddings({
-    model: "text-embedding-004",
-    apiKey: "AIzaSyBJpnMc7Rg02TLIH8wdaC_CSqtcF_cwivI",
-  });
+  // const embeddings = new GoogleGenerativeAIEmbeddings({
+  //   model: "text-embedding-004",
+  //   apiKey: apiKey,
+  // });
 
-  const chunksForTesting = chunkedDocuments.slice(0, 2);
-  let vectors: number[][] = [];
-  try {
-    // تبدیل تمام داکیومنت‌ها به بردار
-    vectors = await embeddings.embedDocuments(
-      chunksForTesting.map((doc) => doc.pageContent)
-    );
-    console.log(
-      `✅ Embeddings successfully generated. Total vectors received: ${vectors.length}`
-    );
+  // const chunksForTesting = chunkedDocuments.slice(0, 2);
+  // let vectors: number[][] = [];
+  // try {
+  //   // تبدیل تمام داکیومنت‌ها به بردار
+  //   vectors = await embeddings.embedDocuments(
+  //     chunksForTesting.map((doc) => doc.pageContent)
+  //   );
+  //   console.log(
+  //     `✅ Embeddings successfully generated. Total vectors received: ${vectors.length}`
+  //   );
 
-    if (vectors.length > 0) {
-      console.log(`First vector dimension: ${vectors[0].length}`);
-      console.log(
-        `First 5 numbers of the first vector: ${vectors[0].slice(0, 5)}`
-      );
-    } else {
-      console.error("❌ CRITICAL: Received zero vectors, aborting.");
-      return;
-    }
-  } catch (error) {
-    console.error("❌ CRITICAL API ERROR during embedding generation:", error);
-    return;
-  }
+  //   if (vectors.length > 0) {
+  //     console.log(`First vector dimension: ${vectors[0].length}`);
+  //     console.log(
+  //       `First 5 numbers of the first vector: ${vectors[0].slice(0, 5)}`
+  //     );
+  //   } else {
+  //     console.error("❌ CRITICAL: Received zero vectors, aborting.");
+  //     return;
+  //   }
+  // } catch (error) {
+  //   console.error("❌ CRITICAL API ERROR during embedding generation:", error);
+  //   return;
+  // }
 
-  // 1. Create and connect to the Redis Client
-  const redisClient: any = createClient({
-    url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
-  });
+  // // 1. Create and connect to the Redis Client
+  // const redisClient: any = createClient({
+  //   url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+  // });
 
-  redisClient.on("error", (err: any) =>
-    console.error("Redis Client Error", err)
-  );
+  // redisClient.on("error", (err: any) =>
+  //   console.error("Redis Client Error", err)
+  // );
 
-  await redisClient.connect();
-  console.log("Connected to Redis Stack Server.");
+  // await redisClient.connect();
+  // console.log("Connected to Redis Stack Server.");
 
-  // 2. Store documents and embeddings in Redis (تغییر روش ذخیره‌سازی)
-  // چون بردارها را دستی تولید کردیم، باید از متد addVectors و addDocuments استفاده کنیم.
+  // // 2. Store documents and embeddings in Redis (تغییر روش ذخیره‌سازی)
+  // // چون بردارها را دستی تولید کردیم، باید از متد addVectors و addDocuments استفاده کنیم.
 
-  // ایجاد یک نمونه خالی از VectorStore
-  const vectorStore = new RedisVectorStore(embeddings, {
-    redisClient: redisClient,
-    indexName: "bluechart_blog_vectors",
-  });
+  // // ایجاد یک نمونه خالی از VectorStore
+  // const vectorStore = new RedisVectorStore(embeddings, {
+  //   redisClient: redisClient,
+  //   indexName: "bluechart_blog_vectors",
+  // });
 
-  console.log("Vectors is: ", vectors);
-  // 3. افزودن بردارها و داکیومنت‌ها به صورت جداگانه
-  // این فرآیند جایگزین .fromDocuments می‌شود.
-  await vectorStore.addVectors(vectors, chunkedDocuments);
+  // console.log("Vectors is: ", vectors);
+  // // 3. افزودن بردارها و داکیومنت‌ها به صورت جداگانه
+  // // این فرآیند جایگزین .fromDocuments می‌شود.
+  // await vectorStore.addVectors(vectors, chunkedDocuments);
 
-  console.log(
-    "Blog posts have been embedded and indexed successfully in Redis."
-  );
-  await redisClient.disconnect();
+  // console.log(
+  //   "Blog posts have been embedded and indexed successfully in Redis."
+  // );
+  // await redisClient.disconnect();
 
   //   // 1. Create and connect to the Redis Client
   //   const redisClient: any = createClient({

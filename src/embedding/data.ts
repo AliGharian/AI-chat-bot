@@ -1,14 +1,14 @@
 import { MongoClient, Document } from "mongodb";
 
-const uri = "mongodb://127.0.0.1:27017";
 
-const DB_NAME = "bluechart-db";
+const MONGO_URI = process.env.DATABASE_URL ?? "";
+const DB_NAME = "ai-bot-db";
 const COLLECTION_NAME = "blogs";
 
 const blogPostData: Document[] = [];
 
 export async function fetchBlogPostsFromMongo(): Promise<Document[]> {
-  const client = new MongoClient(uri);
+  const client = new MongoClient(MONGO_URI);
 
   try {
     console.log(

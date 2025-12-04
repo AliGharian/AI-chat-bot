@@ -18,6 +18,19 @@ async function testApiDirectly() {
   console.log("Starting direct API test with corrected payload structure...");
 
   try {
+
+    const redisClient: any = createClient({
+      url: "redis://default:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+    });
+
+    redisClient.on("error", (err: any) =>
+      console.error("Redis Client Error", err)
+    );
+
+    await redisClient.connect();
+    console.log("Connected to Redis Stack Server.");
+
+    
     const embeddings = new GoogleGenerativeAIEmbeddings({
       model: "text-embedding-004",
       apiKey: apiKey,
@@ -32,16 +45,7 @@ async function testApiDirectly() {
 
     console.log("Received embeddings from API:", vectors);
 
-    const redisClient: any = createClient({
-      url: "redis://default:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
-    });
-
-    redisClient.on("error", (err: any) =>
-      console.error("Redis Client Error", err)
-    );
-
-    await redisClient.connect();
-    console.log("Connected to Redis Stack Server.");
+    
 
     const vectorStore = new RedisVectorStore(embeddings, {
       redisClient: redisClient,
