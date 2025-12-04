@@ -28,4 +28,4 @@ async function testApiDirectly() {
 
 // ⚠️ مطمئن شوید که GoogleGenerativeAI را درست Import کرده‌اید (طبق آخرین راه‌حل)
 // اگر همچنان خطا می‌دهد، باید آن را اجرا کنید.
-// testApiDirectly();
+testApiDirectly();
