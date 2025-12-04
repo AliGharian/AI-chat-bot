@@ -31,20 +31,16 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
     console.log(`Searching Redis for documents similar to: "${userQuery}"...`);
 
     // 3. اجرای جستجوی تشابهی
-    const relevantDocs = await vectorStore.similaritySearch(userQuery, k);
+    const relevantDocs = await vectorStore.similaritySearchWithScore(userQuery, k);
 
     console.log(`\n🔎 Found ${relevantDocs.length} relevant documents:`);
     console.log(`\n🔎 Relevent docs is:  ${relevantDocs}`);
 
     // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
-    relevantDocs.forEach((doc, index) => {
-      // 💡 اگر doc.metadata._score وجود داشت، آن را نمایش بده، در غیر این صورت "N/A"
-      const score =
-        doc.metadata._score !== undefined
-          ? doc.metadata._score.toFixed(4)
-          : "N/A";
+    relevantDocs.forEach(([doc, score], index) => {
+      const formattedScore = score.toFixed(4);
 
-      console.log(`--- Document ${index + 1} (Score: ${score}) ---`);
+      console.log(`--- Document ${index + 1} (Score: ${formattedScore}) ---`);
       console.log(`Title: ${doc.metadata.title}`);
       console.log(`Slug: ${doc.metadata.slug}`);
       // نمایش بخشی از محتوا
@@ -76,7 +72,7 @@ function formatContext(documents: any[]): string {
 
 export async function generateResponseWithRAG(userQuery: string) {
   // الف. بازیابی اسناد مرتبط (گام Retrieval)
-  const relevantDocuments = await runSimilaritySearch(userQuery, 5); // 💡 ۵ سند بازیابی شد
+  const relevantDocuments = await runSimilaritySearch(userQuery, 5);
 
   if (!relevantDocuments || relevantDocuments.length === 0) {
     return "متأسفانه منبع مرتبطی در پایگاه دانش ما پیدا نشد.";
@@ -85,7 +81,6 @@ export async function generateResponseWithRAG(userQuery: string) {
   // ب. فرمت‌دهی اسناد بازیابی شده به یک رشته قابل ارسال
   const contextText = formatContext(relevantDocuments);
 
-  // پ. ساخت پرامپت نهایی (با تزریق Context)
   const prompt = `
         شما یک دستیار متخصص در زمینه بازارهای مالی و تحلیل تکنیکال هستید. 
         فقط بر اساس 'CONTEXT' زیر، به 'USER_QUERY' پاسخ دهید. 
