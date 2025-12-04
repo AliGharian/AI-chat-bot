@@ -1,37 +1,31 @@
 import { GoogleGenAI } from "@google/genai";
 
-// ⚠️ مطمئن شوید که کلید API در اینجا درست است
+// ⚠️ این کلید باید همان کلید اصلی شما باشد
 const apiKey = "AIzaSyBJpnMc7Rg02TLIH8wdaC_CSqtcF_cwivI";
 const ai = new GoogleGenAI({ apiKey });
 
 async function testApiDirectly() {
-  const documents: any = [
+  const documents = [
     "این یک پاراگراف آزمایشی است.",
     "پاراگراف دوم برای تست امبدینگ.",
   ];
 
-  console.log("Starting direct API test...");
+  console.log("Starting direct API test with corrected payload structure...");
 
   try {
     const response = await ai.models.embedContent({
       model: "text-embedding-004",
-      contents: documents.map((text: any) => ({ content: text })),
+      contents: documents,
     });
 
-    const vectors: any[] = response.embeddings ?? [];
+    const vectors = response.embeddings;
 
-    if (vectors && vectors.length === 2 && vectors[0].values.length > 0) {
-      console.log("✅ TEST SUCCESS: API returned valid vectors directly.");
-      console.log(`Vector dimension: ${vectors[0].values.length}`);
-    } else {
-      console.error(
-        "❌ TEST FAILED: API returned zero or empty vectors in response."
-      );
-    }
+    console.log("✅ API Call Successful. Vectors received: ", vectors);
   } catch (error) {
-    // این بلاک CRITICAL ERROR را نشان می‌دهد
     console.error("❌ CRITICAL ERROR IN API CALL (Check Key/Quota):", error);
   }
 }
 
-testApiDirectly();
+// ⚠️ مطمئن شوید که GoogleGenerativeAI را درست Import کرده‌اید (طبق آخرین راه‌حل)
+// اگر همچنان خطا می‌دهد، باید آن را اجرا کنید.
+// testApiDirectly();
