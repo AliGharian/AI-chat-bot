@@ -3,7 +3,7 @@ import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 
 const apiKey = "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E";
-const redisPass = "ChRj72nuujSCW5z92XDVGitu";
+const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
 const REDIS_URL = `redis://default:${redisPass}@84.200.192.243:6379`;
 
 export async function runSimilaritySearch(userQuery: string, k: number = 4) {

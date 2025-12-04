@@ -27,7 +27,7 @@ const API_KEYS = [
   "AIzaSyAC_s6wiKAyiQ2S0T2U4qsOKaaR_MKhucQ",
   "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E",
 ];
-const redisPass = "ChRj72nuujSCW5z92XDVGitu";
+const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
 
 function extractTextFromChildren(children: any[]): string {
   return children
