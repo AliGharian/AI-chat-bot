@@ -1,106 +1,62 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
-import { StringOutputParser } from "@langchain/core/output_parsers";
-import { RunnableSequence } from "@langchain/core/runnables";
-import { MongoClient } from "mongodb";
-import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
-import { createStuffDocumentsChain } from "@langchain/classic/chains/combine_documents";
-import dotenv from "dotenv";
-dotenv.config();
+import { createClient } from "redis";
+import { RedisVectorStore } from "@langchain/redis";
 
-// Define your database constants again
-// const MONGO_URI = "mongodb://127.0.0.1:27017";
-const MONGO_URI = process.env.DATABASE_URL ?? "";
-const DB_NAME = "ai-bot-db";
-const COLLECTION_NAME = "blog_vectors";
-const INDEX_NAME = "vector_index"; // The name of your Atlas Vector Search Index
+const apiKey = "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E";
+const redisPass = "ChRj72nuujSCW5z92XDVGitu";
+const REDIS_URL = `redis://default:${redisPass}@84.200.192.243:6379`;
 
-async function setupRAGChain() {
-  console.log("Setting up LLM and MongoDB Retriever...");
+export async function runSimilaritySearch(userQuery: string, k: number = 4) {
+  const redisClient: any = createClient({ url: REDIS_URL });
 
-  // 1. Initialize the Chat LLM (The Generator)
-  // The model that will generate the final Persian answer.
-  const llm = new ChatGoogleGenerativeAI({
-    model: "gemini-2.5-flash",
-    apiKey: "AIzaSyBJpnMc7Rg02TLIH8wdaC_CSqtcF_cwivI",
-    temperature: 0.1, // Lower temperature ensures more factual and less creative answers
-  });
+  redisClient.on("error", (err: any) =>
+    console.error("Redis Client Error", err)
+  );
 
-  // 2. Initialize Embeddings (Must match the model used for indexing)
-  const embeddings = new GoogleGenerativeAIEmbeddings({
-    model: "text-embedding-004",
-    apiKey: "AIzaSyBJpnMc7Rg02TLIH8wdaC_CSqtcF_cwivI",
-  });
+  try {
+    await redisClient.connect();
+    console.log("✅ Connected to Redis for search.");
 
-  // 3. Connect to the MongoDB Vector Store (The Retriever Source)
-  // We re-initialize the connection to the collection containing the 11,200 vectors.
-  const client = new MongoClient(MONGO_URI);
-  await client.connect();
-  const collection: any = client.db(DB_NAME).collection(COLLECTION_NAME);
+    const embeddings = new GoogleGenerativeAIEmbeddings({
+      model: "text-embedding-004",
+      apiKey: apiKey,
+    });
 
-  const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
-    collection: collection,
-    indexName: INDEX_NAME,
-  });
+    const vectorStore = new RedisVectorStore(embeddings, {
+      redisClient: redisClient,
+      indexName: "bluechart_blog_vectors",
+    });
 
-  // Convert the vector store into a Retriever
-  // k=4: Retrieve the 4 most relevant chunks from the database for the context.
-  const retriever = vectorStore.asRetriever({ k: 4 });
+    console.log(`Searching Redis for documents similar to: "${userQuery}"...`);
 
-  console.log("Retriever initialized. Ready to build the chain.");
-  // ----------------------------------------------------------------
+    const relevantDocs = await vectorStore.similaritySearch(userQuery, k);
 
-  // 4. Define the Prompt Template (Instructions to the LLM)
-  const RAG_PROMPT = ChatPromptTemplate.fromMessages([
-    // System instruction is written in Persian as the final output should be Persian
-    [
-      "system",
-      "شما یک متخصص مالی هستید. وظیفه شما پاسخ دادن به سوال کاربر بر اساس 'فقط' محتوای متنی ارائه شده در زیر است. اگر پاسخ در محتوا نبود، بگویید 'متأسفانه پاسخ دقیق در منابع من موجود نیست.' \n\n Context: {context}",
-    ],
-    ["human", "{input}"],
-  ]);
+    console.log(`\n🔎 Found ${relevantDocs.length} relevant documents:`);
 
-  // 5. Create the Document Combination Chain (Stuffing the Context)
-  // This component takes the documents and inserts them into the {context} placeholder.
-  const combineDocsChain = await createStuffDocumentsChain({
-    llm: llm,
-    prompt: RAG_PROMPT,
-    outputParser: new StringOutputParser(),
-  });
+    relevantDocs.forEach((doc, index) => {
+      console.log(
+        `--- Document ${index + 1} (Score: ${doc.metadata._score.toFixed(
+          4
+        )}) ---`
+      );
+      console.log(`Title: ${doc.metadata.title}`);
+      console.log(`Slug: ${doc.metadata.slug}`);
 
-  // 6. Create the Final RAG Sequence (The Orchestrator)
-  // This chain orchestrates the retrieval (search) and the generation (LLM) steps.
-  const RAG_Chain = RunnableSequence.from([
-    {
-      // First step: Retrieve relevant documents (chunks) based on the user's input
-      context: (input: { input: string }) => retriever.invoke(input.input),
-      input: (input: { input: string }) => input.input,
-    },
-    // Second step: Pass the retrieved documents and user input to the combination chain
-    combineDocsChain,
-  ]);
+      console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
+    });
 
-  console.log("✅ RAG Chain setup complete.");
-  return RAG_Chain;
+    return relevantDocs;
+  } catch (error) {
+    console.error("❌ ERROR DURING SEARCH:", error);
+  } finally {
+    if (redisClient && redisClient.isOpen) {
+      await redisClient.disconnect();
+    }
+  }
 }
 
-export async function runQASystem(query: string) {
-  const chain = await setupRAGChain();
-
-  console.log(`\nUser Query: ${query}`);
-
-  // Invoking the chain starts the full RAG process.
-  const result = await chain.invoke({
-    input: query,
-  });
-  console.log(`\nGemini Answer:\n${result}`);
-  return result;
-
-  // NOTE: Don't forget to close the MongoClient connection when the application shuts down
-}
-
-const query = "آیا برای واریز به آلپاری روش های داخل ایران کار می کند؟";
-runQASystem(query).catch((error) => {
-  console.error("Error running the QA system:", error);
-});
+// // 🎯 پرسش آزمایشی شما
+// runSimilaritySearch(
+//   "بهترین روش‌های برنامه‌ریزی مالی برای کسب‌وکارهای کوچک کدامند؟",
+//   5
+// ).then(() => console.log("\nSearch process finished."));
