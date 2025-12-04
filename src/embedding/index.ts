@@ -7,7 +7,7 @@ import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 
-const apiKey = "AIzaSyDmlac2OTGO1BDK08KVvLiDI5LeMcuWMDw";
+const apiKey = "AIzaSyDwoBG-uWofAMKjCCwBebUyGTfWNm3trPc";
 const redisPass = "ChRj72nuujSCW5z92XDVGitu";
 
 function extractTextFromChildren(children: any[]): string {
