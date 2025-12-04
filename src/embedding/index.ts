@@ -8,6 +8,25 @@ import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 
 const apiKey = "AIzaSyDwoBG-uWofAMKjCCwBebUyGTfWNm3trPc";
+const API_KEYS = [
+  "AIzaSyB9uMGVcAeKdyom12D-jnS-CS7nsUsz4ho",
+  "AIzaSyDjvQytlDN5ASSXiWyiVsB7SHJPQreJaFQ",
+  "AIzaSyCQ9-ubR0pUdH5AFP7XpaUYAvmmqylmZcU",
+  "AIzaSyDj2wwhWwDu5y4yas2Xcw84yoRaxXZytMs",
+  "AIzaSyAMY-ak1OdMFaI9a8ca3aUpOEu7Ik9ODkY",
+  "AIzaSyBW7saZ-NErpGyqJWfVXjiJRd2vkNSCX48",
+  "AIzaSyBHaG5CCnl0whsiYtfRXN5Vkzxg_2MoRu4",
+  "AIzaSyAINfX3SVqL6BOSz1wXSklkSpzsTc1kyHk",
+  "AIzaSyDuVf6zqzwRexAv6XZ1Cjpb5BurtV2Uf1Y",
+  "AIzaSyCSJhgsKhomm4q9Z7u8KTj2W1IxkIAUkpo",
+  "AIzaSyCA05IiGt2UdfpKN6FXEfAndL-jGaM341I",
+  "AIzaSyAibMGVN5955S7cl2JQWN3MQ-kDMK6Y5HI",
+  "AIzaSyD--tSm9JZtEChUGYFrDJxuYVKV6g9kFSY",
+  "AIzaSyB8VMg99jJY_NzursuZnw6ByUeh5l7iSbA",
+  "AIzaSyC9HWYmUD-sZkrSdId9_R15FSzWFclWekA",
+  "AIzaSyAC_s6wiKAyiQ2S0T2U4qsOKaaR_MKhucQ",
+  "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E",
+];
 const redisPass = "ChRj72nuujSCW5z92XDVGitu";
 
 function extractTextFromChildren(children: any[]): string {
@@ -85,8 +104,6 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 }
 
 async function indexBlogPosts() {
-  const ai = new GoogleGenAI({ apiKey });
-
   // Fetch blog post data from MongoDB
   const blogPostData: any[] = await fetchBlogPostsFromMongo();
 
@@ -103,11 +120,6 @@ async function indexBlogPosts() {
   console.log("Connected to Redis Stack Server.");
   // ------------------------------------------
   console.log("Starting the embedding and indexing process...");
-
-  const embeddings = new GoogleGenerativeAIEmbeddings({
-    model: "text-embedding-004",
-    apiKey: apiKey,
-  });
 
   console.log("First blog post data:  ", blogPostData[0].content); // 1.1: تولید Raw Docs
 
@@ -137,34 +149,86 @@ async function indexBlogPosts() {
   console.log(`Blog posts after chunking: ${chunkedDocuments.length}`); // 1.3: آماده‌سازی Batching
 
   const chunkedBatches = chunkArray(chunkedDocuments, BATCH_SIZE);
+  const totalChunks = chunkedDocuments.length;
   let indexedCount = 0;
 
   console.log(
     `Starting batched embedding in ${chunkedBatches.length} batches (size: ${BATCH_SIZE})...`
   );
 
-  const vectorStore = new RedisVectorStore(embeddings, {
-    redisClient: redisClient, // 💡 استفاده از client بجای redisClient
-    indexName: "bluechart_blog_vectors",
-  });
+  let currentKeyIndex = 0;
+  let currentAPIKey = API_KEYS[currentKeyIndex];
+  let processingSucceeded = false;
 
-  for (const batch of chunkedBatches) {
-    const batchTexts = batch.map((doc) => doc.pageContent);
-
-    const response: any = await ai.models.embedContent({
+  while (currentKeyIndex < API_KEYS.length && !processingSucceeded) {
+    const ai = new GoogleGenAI({ apiKey: currentAPIKey });
+    const embeddings = new GoogleGenerativeAIEmbeddings({
       model: "text-embedding-004",
-      contents: batchTexts,
+      apiKey: currentAPIKey,
     });
 
-    const correctedVectors = response.embeddings.map((v: any) => v.values);
+    const vectorStore = new RedisVectorStore(embeddings, {
+      redisClient: redisClient, // 💡 استفاده از client بجای redisClient
+      indexName: "bluechart_blog_vectors",
+    });
 
-    await vectorStore.addVectors(correctedVectors, batch);
+    try {
+      // 💡 حلقه اصلی Batching باید ادامه پیدا کند
+      for (
+        let i = Math.floor(indexedCount / BATCH_SIZE);
+        i < chunkedBatches.length;
+        i++
+      ) {
+        const batch = chunkedBatches[i];
 
-    indexedCount += batch.length;
-    console.log(
-      `✅ Indexed ${indexedCount} out of ${chunkedDocuments.length} chunks. (Batch size: ${batch.length})`
-    );
-    await new Promise((resolve) => setTimeout(resolve, 500));
+        // 3.1: تولید وکتورها
+        const batchTexts = batch.map((doc) => doc.pageContent);
+        const response: any = await ai.models.embedContent({
+          model: "text-embedding-004",
+          contents: batchTexts,
+        });
+
+        // 3.2: ذخیره‌سازی در Redis
+        const correctedVectors = response.embeddings.map((v: any) => v.values);
+        await vectorStore.addVectors(correctedVectors, batch);
+
+        indexedCount += batch.length;
+        console.log(
+          `✅ Indexed ${indexedCount} of ${totalChunks} chunks. (Batch: ${
+            i + 1
+          }/${chunkedBatches.length})`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      // اگر حلقه به پایان رسید، یعنی پردازش با موفقیت تمام شده است
+      processingSucceeded = true;
+    } catch (error: any) {
+      if (error.status === 400 || error.message.includes("API key expired")) {
+        console.error(
+          `API Error (Status 400 or Expired Key) occurred at chunk ${indexedCount}.`
+        );
+        currentKeyIndex++;
+
+        if (currentKeyIndex >= API_KEYS.length) {
+          console.error(
+            "All API keys have failed or expired. Stopping process."
+          );
+          throw new Error("All API keys failed.");
+        } else {
+          currentAPIKey = API_KEYS[currentKeyIndex];
+          console.warn(
+            `Switching to the next key (Index: ${
+              currentKeyIndex + 1
+            }). Resuming from chunk ${indexedCount}.`
+          );
+          // Continue to the next iteration of the while loop to retry with the new key
+        }
+      } else {
+        console.error("❌ UNEXPECTED CRITICAL ERROR:", error);
+        throw error;
+      }
+    }
   }
 
   await redisClient.disconnect();
