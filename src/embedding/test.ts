@@ -36,6 +36,8 @@ async function testApiDirectly() {
       url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
     });
 
+    await redisClient.connect();
+
     const vectorStore = new RedisVectorStore(embeddings, {
       redisClient: redisClient,
       indexName: "bluechart_blog_vectors",
@@ -63,6 +65,7 @@ async function testApiDirectly() {
 
     console.log("Correct Vectors to be added to Redis:", correctedVectors);
 
+     await redisClient.disconnect();
     await vectorStore.addVectors(correctedVectors, chunkedDocuments);
   } catch (error) {
     console.error("❌ CRITICAL ERROR IN API CALL (Check Key/Quota):", error);
