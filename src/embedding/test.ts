@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 // ⚠️ این کلید باید همان کلید اصلی شما باشد
-const apiKey = "AIzaSyBJpnMc7Rg02TLIH8wdaC_CSqtcF_cwivI";
+const apiKey = "AIzaSyDmlac2OTGO1BDK08KVvLiDI5LeMcuWMDw";
 const ai = new GoogleGenAI({ apiKey });
 
 async function testApiDirectly() {
