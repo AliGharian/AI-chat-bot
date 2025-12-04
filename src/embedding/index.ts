@@ -8,6 +8,7 @@ import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 
 const apiKey = "AIzaSyDmlac2OTGO1BDK08KVvLiDI5LeMcuWMDw";
+const redisPass = "ChRj72nuujSCW5z92XDVGitu";
 
 /**
  * Recursively extracts text from nested 'children' arrays, handling inline formatting and nested blocks.
@@ -87,6 +88,21 @@ function extractRawText(contentBlocks: any): string {
   return rawText.trim();
 }
 
+const BATCH_SIZE = 90; // 👈 تعیین اندازه دسته: ۹۰ سند در هر فراخوانی (کمتر از ۱۰۰)
+
+/**
+ * 💡 تابع کمکی برای تقسیم آرایه‌ها به دسته‌های کوچکتر
+ * @param arr - آرایه ورودی (مثل chunkedDocuments)
+ * @param size - حداکثر تعداد آیتم‌ها در هر دسته
+ */
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
 async function indexBlogPosts() {
   const ai = new GoogleGenAI({ apiKey });
 
@@ -95,7 +111,7 @@ async function indexBlogPosts() {
 
   // Connect to the redis
   const redisClient: any = createClient({
-    url: "redis://default:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
+    url: `redis://default:${redisPass}@84.200.192.243:6379`,
   });
 
   redisClient.on("error", (err: any) =>
@@ -121,18 +137,6 @@ async function indexBlogPosts() {
     contents: cleanedDocuments,
   });
 
-  const vectors: any = response.embeddings;
-
-  console.log("Received embeddings from API:", vectors);
-
-  const vectorStore = new RedisVectorStore(embeddings, {
-    redisClient: redisClient,
-    indexName: "bluechart_blog_vectors",
-  });
-
-  // -----------------------------------------------------
-  // Step 1: Convert blog posts to LangChain Documents
-  // -----------------------------------------------------
   console.log("First blog post data:  ", blogPostData[0].content);
 
   const rawDocs: Document[] = blogPostData.map((post) => {
@@ -163,11 +167,52 @@ async function indexBlogPosts() {
 
   console.log(`Blog posts after chunking: ${chunkedDocuments.length}`);
 
-  const correctedVectors = vectors.map((v: any) => v.values);
+  // -----------------------------------------------------
+  // Step 1: Chunking and batching data
+  // -----------------------------------------------------
+  const chunkedBatches = chunkArray(chunkedDocuments, BATCH_SIZE);
+  let indexedCount = 0;
 
-  console.log("Correct Vectors to be added to Redis:", correctedVectors);
+  console.log(
+    `Starting batched embedding in ${chunkedBatches.length} batches (size: ${BATCH_SIZE})...`
+  );
 
-  await vectorStore.addVectors(correctedVectors, chunkedDocuments);
+  const vectorStore = new RedisVectorStore(embeddings, {
+    redisClient: redisClient,
+    indexName: "bluechart_blog_vectors",
+  });
+
+  for (const batch of chunkedBatches) {
+    // 3.1: استخراج متن‌ها برای API
+    const batchTexts = batch.map((doc) => doc.pageContent);
+
+    // 3.2: فراخوانی API با تعداد کم (زیر ۱۰۰)
+    // 💡 نکته: ما از متد خام ai.models.embedContent استفاده می‌کنیم چون LangChain's
+    // embedDocuments گاهی اوقات با batching مشکل دارد.
+    const response: any = await ai.models.embedContent({
+      model: "text-embedding-004",
+      contents: batchTexts,
+    });
+
+    // 3.3: تصحیح ساختار وکتورها (API response format)
+    const correctedVectors = response.embeddings.map((v: any) => v.values);
+
+    // 3.4: ذخیره در Redis
+    await vectorStore.addVectors(correctedVectors, batch);
+
+    indexedCount += batch.length;
+    console.log(
+      `✅ Indexed ${indexedCount} out of ${chunkedDocuments.length} chunks. (Batch size: ${batch.length})`
+    );
+
+    // تأخیر کوتاه برای جلوگیری از Rate Limiting (اختیاری)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  console.log(
+    "✅ SUCCESS: All blog posts have been embedded and indexed successfully."
+  );
+
   await redisClient.disconnect();
 
   // -----------------------------------------------------
