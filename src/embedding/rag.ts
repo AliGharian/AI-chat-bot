@@ -74,7 +74,7 @@ function formatContext(documents: any[]): string {
 
 export async function generateResponseWithRAG(userQuery: string) {
   // الف. بازیابی اسناد مرتبط (گام Retrieval)
-  const relevantDocuments = await runSimilaritySearch(userQuery, 5);
+  const relevantDocuments = await runSimilaritySearch(userQuery, 8);
   console.log("RELEVENT DOCS IS: ", JSON.stringify(relevantDocuments));
 
   if (!relevantDocuments || relevantDocuments.length === 0) {
