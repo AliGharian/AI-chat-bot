@@ -59,6 +59,10 @@ async function testApiDirectly() {
 
     const chunkedDocuments: any[] = await splitter.splitDocuments(rawDocs);
 
+    const correctedVectors = vectors.map((v: any) => v.values);
+
+    console.log("Correct Vectors to be added to Redis:", correctedVectors);
+
     await vectorStore.addVectors(vectors, chunkedDocuments);
   } catch (error) {
     console.error("❌ CRITICAL ERROR IN API CALL (Check Key/Quota):", error);
