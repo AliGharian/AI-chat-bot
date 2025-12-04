@@ -2,6 +2,7 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
+import { json } from "stream/consumers";
 
 const apiKey = "AIzaSyDDlkniK1lUMiZFb4x-F-bvROYeQfPe1ww";
 const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
@@ -31,23 +32,26 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
     console.log(`Searching Redis for documents similar to: "${userQuery}"...`);
 
     // 3. اجرای جستجوی تشابهی
-    const relevantDocs = await vectorStore.similaritySearchWithScore(userQuery, k);
+    const results = await vectorStore.similaritySearchWithScore(
+      userQuery,
+      k
+    );
 
-    console.log(`\n🔎 Found ${relevantDocs.length} relevant documents:`);
-    console.log(`\n🔎 Relevent docs is:  ${relevantDocs}`);
+    console.log(`\n🔎 Found ${results.length} relevant documents:`);
 
     // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
-    relevantDocs.forEach(([doc, score], index) => {
-      const formattedScore = score
-      
+    results.forEach(([doc, score], index) => {
+      const formattedScore = score;
+
       console.log(`--- Document ${index + 1} (Score: ${formattedScore}) ---`);
-      console.log(`Title: ${doc}`);
+      console.log(`Title: ${JSON.stringify(doc)}`);
       // console.log(`Title: ${doc.metadata.title}`);
       // console.log(`Slug: ${doc.metadata.slug}`);
       // نمایش بخشی از محتوا
       // console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
     });
 
+    const relevantDocs = results.map(([doc]) => doc);
     return relevantDocs;
   } catch (error) {
     console.error("❌ ERROR DURING SEARCH:", error);
