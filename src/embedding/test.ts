@@ -30,6 +30,8 @@ async function testApiDirectly() {
 
     const vectors: any = response.embeddings;
 
+    console.log("Received embeddings from API:", vectors);
+
     const redisClient: any = createClient({
       url: "redis://:ChRj72nuujSCW5z92XDVGitu@84.200.192.243:6379",
     });
@@ -45,8 +47,6 @@ async function testApiDirectly() {
     });
 
     const rawDocs: Document[] = documents.map((post) => {
-
-
       return new Document({
         pageContent: post,
         metadata: {
@@ -60,8 +60,6 @@ async function testApiDirectly() {
     const chunkedDocuments: any[] = await splitter.splitDocuments(rawDocs);
 
     await vectorStore.addVectors(vectors, chunkedDocuments);
-
-    console.log("✅ API Call Successful. Vectors received: ", vectors);
   } catch (error) {
     console.error("❌ CRITICAL ERROR IN API CALL (Check Key/Quota):", error);
   }
