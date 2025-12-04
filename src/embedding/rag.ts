@@ -32,10 +32,7 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
     console.log(`Searching Redis for documents similar to: "${userQuery}"...`);
 
     // 3. اجرای جستجوی تشابهی
-    const results = await vectorStore.similaritySearchWithScore(
-      userQuery,
-      k
-    );
+    const results = await vectorStore.similaritySearchWithScore(userQuery, k);
 
     console.log(`\n🔎 Found ${results.length} relevant documents:`);
 
@@ -78,12 +75,12 @@ function formatContext(documents: any[]): string {
 export async function generateResponseWithRAG(userQuery: string) {
   // الف. بازیابی اسناد مرتبط (گام Retrieval)
   const relevantDocuments = await runSimilaritySearch(userQuery, 5);
+  console.log("RELEVENT DOCS IS: ", JSON.stringify(relevantDocuments));
 
   if (!relevantDocuments || relevantDocuments.length === 0) {
     return "متأسفانه منبع مرتبطی در پایگاه دانش ما پیدا نشد.";
   }
 
-  // ب. فرمت‌دهی اسناد بازیابی شده به یک رشته قابل ارسال
   const contextText = formatContext(relevantDocuments);
 
   const prompt = `
@@ -100,13 +97,11 @@ export async function generateResponseWithRAG(userQuery: string) {
 
   console.log("📝 Sending final prompt to Gemini for generation...");
 
-  // ت. ارسال به LLM برای تولید پاسخ (گام Generation)
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash", // یا gemini-2.5-pro
     contents: prompt,
   });
 
-  // ث. استخراج و نمایش پاسخ نهایی
   const finalAnswer = response.text;
 
   console.log("✅ Final Answer from LLM received.");
