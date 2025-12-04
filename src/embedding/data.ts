@@ -1,5 +1,6 @@
 import { MongoClient, Document } from "mongodb";
-
+import dotenv from "dotenv";
+dotenv.config();
 
 const MONGO_URI = process.env.DATABASE_URL ?? "";
 const DB_NAME = "ai-bot-db";
