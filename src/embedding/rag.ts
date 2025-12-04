@@ -38,7 +38,7 @@ export async function runSimilaritySearch(userQuery: string, k: number = 4) {
 
     // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
     relevantDocs.forEach(([doc, score], index) => {
-      const formattedScore = score.toFixed(4);
+      const formattedScore = score
 
       console.log(`--- Document ${index + 1} (Score: ${formattedScore}) ---`);
       console.log(`Title: ${doc.metadata.title}`);
