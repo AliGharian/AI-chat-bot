@@ -2,31 +2,31 @@ import { Document } from "@langchain/core/documents";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { fetchBlogPostsFromMongo } from "./data";
-import { ObjectId } from "mongodb";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 
 const apiKey = "AIzaSyDwoBG-uWofAMKjCCwBebUyGTfWNm3trPc";
 const API_KEYS = [
-  "AIzaSyB9uMGVcAeKdyom12D-jnS-CS7nsUsz4ho",
-  "AIzaSyDjvQytlDN5ASSXiWyiVsB7SHJPQreJaFQ",
-  "AIzaSyCQ9-ubR0pUdH5AFP7XpaUYAvmmqylmZcU",
-  "AIzaSyDj2wwhWwDu5y4yas2Xcw84yoRaxXZytMs",
-  "AIzaSyAMY-ak1OdMFaI9a8ca3aUpOEu7Ik9ODkY",
-  "AIzaSyBW7saZ-NErpGyqJWfVXjiJRd2vkNSCX48",
-  "AIzaSyBHaG5CCnl0whsiYtfRXN5Vkzxg_2MoRu4",
-  "AIzaSyAINfX3SVqL6BOSz1wXSklkSpzsTc1kyHk",
-  "AIzaSyDuVf6zqzwRexAv6XZ1Cjpb5BurtV2Uf1Y",
-  "AIzaSyCSJhgsKhomm4q9Z7u8KTj2W1IxkIAUkpo",
-  "AIzaSyCA05IiGt2UdfpKN6FXEfAndL-jGaM341I",
-  "AIzaSyAibMGVN5955S7cl2JQWN3MQ-kDMK6Y5HI",
-  "AIzaSyD--tSm9JZtEChUGYFrDJxuYVKV6g9kFSY",
-  "AIzaSyB8VMg99jJY_NzursuZnw6ByUeh5l7iSbA",
-  "AIzaSyC9HWYmUD-sZkrSdId9_R15FSzWFclWekA",
-  "AIzaSyAC_s6wiKAyiQ2S0T2U4qsOKaaR_MKhucQ",
-  "AIzaSyDwlu_bOrGnAcDbbEWKEJ2WCSAXv2a8v7E",
+  "AIzaSyDhPY42BadYqKG9CKSlP0W5zkhjOzPl0Bs",
+  "AIzaSyDuBv55T0USkUKgwcxW_J1so1odGO3XabA",
+  "AIzaSyCeIC_HdzXbGrlQ1KkooNDaj92BOUaF2VQ",
+  "AIzaSyBdYwXOEdZx9SoVdl9XnlYleQW6m8anFWE",
+  "AIzaSyDaYozOQjRYEpwaKLjNbncxzMQvPLfFPbs",
+  "AIzaSyANdCPO-W-ULSw5awIsG2RtC2Eg9h6gTlQ",
+  "AIzaSyChBXoo8NQAP5JcFy6Ue2RjhQ6Re5UQOuo",
+  "AIzaSyAxsuX_SF1k3O9-z7B3jF86bzIiGBADcCg",
+  "AIzaSyCdtzE5O137ufyM1y97rjzU9xRh36j7Q0k",
+  "AIzaSyAsDo-HO-b5k5ZtARN48OOCh53B_PnDxCc",
+  "AIzaSyDvaoO1I_sG-R38fhd1tt8VLdEsHZm3Jq4",
+  "AIzaSyAeBl_cCwYwrWaBiuiKb3PPxUzWXzXE6zg",
+  "AIzaSyDD4D1qiWrqaTw4pqyw4PBF-9ZQ0pMh7OI",
+  "AIzaSyB08won-Dif_GG3ZCviB1SnxCLBLvp4LmE",
+  "AIzaSyDaYKppN9uAib_3c08paeh9EhDTlnySwBA",
+  "AIzaSyCwcfosfOympHbgMEH-f9wAA-iKyk6bViY",
+  "AIzaSyDXoUtX2_RTBOAzDTUyxBv_9uF8yyelLHg",
 ];
+
 const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
 
 function extractTextFromChildren(children: any[]): string {

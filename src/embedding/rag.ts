@@ -2,7 +2,7 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
-import { json } from "stream/consumers";
+
 
 const apiKey = "AIzaSyDDlkniK1lUMiZFb4x-F-bvROYeQfPe1ww";
 const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
@@ -113,3 +113,79 @@ export async function generateResponseWithRAG(userQuery: string) {
 //   "بهترین روش‌های برنامه‌ریزی مالی برای کسب‌وکارهای کوچک کدامند؟",
 //   5
 // ).then(() => console.log("\nSearch process finished."));
+
+// const relevant = [
+//   {
+//     pageContent: "اسپرد چیست؟",
+//     metadata: {
+//       id: "664f16bbd47be13182c9f8b6",
+//       title: "کمترین اسپرد آلپاری + کمیسیون حساب ecn آلپاری",
+//       slug: "alpari-spread",
+//       loc: { lines: { from: 11, to: 11 } },
+//     },
+//   },
+//   {
+//     pageContent: "اسکالپ چیست؟",
+//     metadata: {
+//       id: "67319616ae188247704b5678",
+//       title: "اسکالپ در ترید چیست؟ + بهترین استراتژی اسکالپینگ",
+//       slug: "what-is-scalp",
+//       loc: { lines: { from: 3, to: 3 } },
+//     },
+//   },
+//   {
+//     pageContent: "قراردادهای مشتقه",
+//     metadata: {
+//       id: "6742df361c2418ec2ba29b1c",
+//       title:
+//         "بازار نوظهور (emerging market) چیست؟ + مقایسه بازارهای نوظهور و بازارهای توسعه یافته",
+//       slug: "what-is-emerging-market",
+//       loc: { lines: { from: 66, to: 66 } },
+//     },
+//   },
+//   {
+//     pageContent: "نوع بروکر",
+//     metadata: {
+//       id: "6757fd1cffe0c998b6cc487e",
+//       title: "بهترین بروکرهای فارکس برای ایرانیان در سال 2025",
+//       slug: "best-brokers-2025",
+//       loc: { lines: { from: 43, to: 43 } },
+//     },
+//   },
+//   {
+//     pageContent: "تحلیل فاندامنتال",
+//     metadata: {
+//       id: "676d2c96c27689b5d95aae14",
+//       title: "انواع تحلیل در فارکس چیست؟ + روش های تحلیلی بازار فارکس",
+//       slug: "types-of-analysis-in-forex",
+//       loc: { lines: { from: 18, to: 18 } },
+//     },
+//   },
+//   {
+//     pageContent: "اروپای شمالی",
+//     metadata: {
+//       id: "683426aa356685ef51318b4e",
+//       title: "رگوله یا رگولیشن چیست؟ + مهم ترین نهادهای رگولاتوری در جهان",
+//       slug: "what-is-regulation",
+//       loc: { lines: { from: 32, to: 32 } },
+//     },
+//   },
+//   {
+//     pageContent: "اروپای شرقی",
+//     metadata: {
+//       id: "683426aa356685ef51318b4e",
+//       title: "رگوله یا رگولیشن چیست؟ + مهم ترین نهادهای رگولاتوری در جهان",
+//       slug: "what-is-regulation",
+//       loc: { lines: { from: 36, to: 36 } },
+//     },
+//   },
+//   {
+//     pageContent: "اروپای جنوبی",
+//     metadata: {
+//       id: "683426aa356685ef51318b4e",
+//       title: "رگوله یا رگولیشن چیست؟ + مهم ترین نهادهای رگولاتوری در جهان",
+//       slug: "what-is-regulation",
+//       loc: { lines: { from: 40, to: 40 } },
+//     },
+//   },
+// ];
