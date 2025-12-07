@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 dotenv.config();
 
-const apiKey = "AIzaSyDDlkniK1lUMiZFb4x-F-bvROYeQfPe1ww";
+const apiKey = process.env.GEMINI_API_KEY || ""
 const redisPass = process.env.REDIS_PASSWORD || "";
 const REDIS_URL = `redis://default:${redisPass}@84.200.192.243:6379`;
 
