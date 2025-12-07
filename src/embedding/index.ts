@@ -8,7 +8,7 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 dotenv.config();
 
-const API_KEYS = process.env.GOOGLE_GENAI_API_KEYS ?? [];
+const API_KEYS = JSON.parse(process.env.GOOGLE_GENAI_API_KEYS ?? "[]");
 
 const redisPass = process.env.REDIS_PASSWORD || "";
 
