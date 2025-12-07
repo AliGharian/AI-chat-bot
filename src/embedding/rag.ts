@@ -2,10 +2,11 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
-
+import dotenv from "dotenv";
+dotenv.config();
 
 const apiKey = "AIzaSyDDlkniK1lUMiZFb4x-F-bvROYeQfPe1ww";
-const redisPass = "phoh7aeXEeruPae3eeb8eiX2daa3Eevu";
+const redisPass = process.env.REDIS_PASSWORD || "";
 const REDIS_URL = `redis://default:${redisPass}@84.200.192.243:6379`;
 
 export async function runSimilaritySearch(userQuery: string, k: number = 4) {
