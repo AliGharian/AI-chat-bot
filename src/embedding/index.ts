@@ -143,6 +143,7 @@ async function indexBlogPosts() {
   let currentAPIKey = API_KEYS[currentKeyIndex];
   let processingSucceeded = false;
 
+  console.log("API KEY LIST IS: ", API_KEYS)
   while (currentKeyIndex < API_KEYS.length && !processingSucceeded) {
     const ai = new GoogleGenAI({ apiKey: currentAPIKey });
     const embeddings = new GoogleGenerativeAIEmbeddings({
