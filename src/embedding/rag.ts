@@ -83,7 +83,7 @@ function formatContext(documents: Document[]): string {
 export async function runSimilaritySearch2(
   userQuery: string,
   k: number = 10
-): Promise<Document[]> {
+): Promise<[Document[], any]> {
   const weaviateClient: WeaviateClient = weaviate.client({
     scheme: "http",
     host: WEAVIATE_HOST,
@@ -93,7 +93,7 @@ export async function runSimilaritySearch2(
   const isReady = await weaviateClient.misc.readyChecker().do();
   if (!isReady) {
     console.error("❌ Weaviate is not ready. Cannot perform search.");
-    return [];
+    return [[], null];
   }
   console.log(
     "✅ Connected to Weaviate for search. Using native GraphQL search."
@@ -141,12 +141,12 @@ export async function runSimilaritySearch2(
     return doc;
   });
 
-  return relevantDocuments;
+  return [relevantDocuments, queryVector];
 }
 
 export async function generateResponseWithRAG(userQuery: string) {
   // الف. بازیابی اسناد مرتبط (گام Retrieval)
-  const relevantDocuments = await runSimilaritySearch2(userQuery, 8);
+  const [relevantDocuments, queryVector] = await runSimilaritySearch2(userQuery, 8);
   console.log("RELEVENT DOCS IS: ", JSON.stringify(relevantDocuments));
 
   if (!relevantDocuments || relevantDocuments.length === 0) {
@@ -177,5 +177,5 @@ export async function generateResponseWithRAG(userQuery: string) {
   const finalAnswer = response.text;
 
   console.log("✅ Final Answer from LLM received.");
-  return finalAnswer;
+  return [finalAnswer, queryVector];
 }

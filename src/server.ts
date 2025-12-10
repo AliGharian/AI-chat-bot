@@ -286,8 +286,8 @@ app.post("/api/chat", async (req, res) => {
           `;
 
   try {
-    const result = await generateResponseWithRAG(prompt);
-    return res.status(200).json({ result });
+    const [result, queryVector] = await generateResponseWithRAG(prompt);
+    return res.status(200).json({ result, vector: queryVector });
   } catch (err: any) {
     console.error("Gemini API error:", err);
     if (!res.headersSent) {
