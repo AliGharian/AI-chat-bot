@@ -1,16 +1,14 @@
 import { Document } from "@langchain/core/documents";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { fetchBlogPostsFromMongo } from "./data";
-import { createClient } from "redis";
-import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
+import weaviate, { WeaviateClient } from "weaviate-ts-client";
 import dotenv from "dotenv";
 dotenv.config();
 
 const API_KEYS = JSON.parse(process.env.GOOGLE_GENAI_API_KEYS ?? "[]");
-
-const redisPass = process.env.REDIS_PASSWORD || "";
+const WEAVIATE_HOST = "84.200.192.243:8080";
+const WEAVIATE_CLASS_NAME = "DocumentChunk";
 
 function extractTextFromChildren(children: any[]): string {
   return children
@@ -36,9 +34,7 @@ function extractRawText(contentBlocks: any): string {
   let rawText = "";
 
   const blocks: any[] = JSON.parse(contentBlocks);
-  console.log("Data:", typeof blocks);
   for (const block of blocks) {
-    console.log("Block Type:", block.type);
     // Skip non-textual blocks like images and custom components (CTAs).
     if (["image", "target"].includes(block.type)) {
       // Optional: Include caption text if available
@@ -87,20 +83,23 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 }
 
 async function indexBlogPosts() {
-  // Fetch blog post data from MongoDB
-  const blogPostData: any[] = await fetchBlogPostsFromMongo();
-
-  // Connect to the redis
-  const redisClient: any = createClient({
-    url: `redis://default:${redisPass}@84.200.192.243:6379`,
+  // 1. Connect to Weaviate
+  const weaviateClient: WeaviateClient = weaviate.client({
+    scheme: "http",
+    host: WEAVIATE_HOST,
   });
 
-  redisClient.on("error", (err: any) =>
-    console.error("Redis Client Error", err)
-  );
+  const isReady = await weaviateClient.misc.readyChecker().do();
+  if (!isReady) {
+    console.error(
+      "❌ Weaviate is not ready. Please check the Docker container."
+    );
+    return;
+  }
+  console.log(`✅ Connected to Weaviate at ${WEAVIATE_HOST}. Server is ready.`);
 
-  await redisClient.connect();
-  console.log("Connected to Redis Stack Server.");
+  // Fetch blog post data from MongoDB
+  const blogPostData: any[] = await fetchBlogPostsFromMongo();
   // ------------------------------------------
   console.log("Starting the embedding and indexing process...");
 
@@ -112,7 +111,7 @@ async function indexBlogPosts() {
     return new Document({
       pageContent: cleanedContent,
       metadata: {
-        id: post._id.toString(), // 💡 Object ID به string تبدیل شد
+        id: post._id.toString(),
         title: post.title,
         slug: post.slug,
       },
@@ -120,7 +119,7 @@ async function indexBlogPosts() {
   });
 
   console.log(`Total raw blog posts fetched: ${rawDocs.length}`);
-  console.log("Last raw document:", rawDocs[0]); // 1.2: تقسیم داکیومنت‌ها (Chunking)
+  console.log("Last raw document:", rawDocs[0]);
 
   const splitter = new RecursiveCharacterTextSplitter({
     chunkSize: 500,
@@ -143,21 +142,11 @@ async function indexBlogPosts() {
   let currentAPIKey = API_KEYS[currentKeyIndex];
   let processingSucceeded = false;
 
-  console.log("API KEY LIST IS: ", API_KEYS)
+  console.log("API KEY LIST IS: ", API_KEYS);
   while (currentKeyIndex < API_KEYS.length && !processingSucceeded) {
     const ai = new GoogleGenAI({ apiKey: currentAPIKey });
-    const embeddings = new GoogleGenerativeAIEmbeddings({
-      model: "text-embedding-004",
-      apiKey: currentAPIKey,
-    });
-
-    const vectorStore = new RedisVectorStore(embeddings, {
-      redisClient: redisClient, // 💡 استفاده از client بجای redisClient
-      indexName: "bluechart_blog_vectors",
-    });
 
     try {
-      // 💡 حلقه اصلی Batching باید ادامه پیدا کند
       for (
         let i = Math.floor(indexedCount / BATCH_SIZE);
         i < chunkedBatches.length;
@@ -165,16 +154,37 @@ async function indexBlogPosts() {
       ) {
         const batch = chunkedBatches[i];
 
-        // 3.1: تولید وکتورها
+        // Generate vectors
         const batchTexts = batch.map((doc) => doc.pageContent);
         const response: any = await ai.models.embedContent({
           model: "text-embedding-004",
           contents: batchTexts,
         });
 
-        // 3.2: ذخیره‌سازی در Redis
         const correctedVectors = response.embeddings.map((v: any) => v.values);
-        await vectorStore.addVectors(correctedVectors, batch);
+
+        const batcher = weaviateClient.batch.objectsBatcher();
+
+        for (let k = 0; k < batch.length; k++) {
+          const doc = batch[k];
+          const vector = correctedVectors[k];
+
+          //Create
+          const dataObject = {
+            content: doc.pageContent,
+            sourceKey: doc.metadata.sourceKey,
+            metadataJson: doc.metadata.metadataJson,
+          };
+
+          batcher.withObject({
+            class: WEAVIATE_CLASS_NAME,
+            properties: dataObject,
+            vector: vector,
+          });
+        }
+
+        // Execute batch
+        await batcher.do();
 
         indexedCount += batch.length;
         console.log(
@@ -213,8 +223,6 @@ async function indexBlogPosts() {
       }
     }
   }
-
-  await redisClient.disconnect();
 
   console.log("Blog posts have been embedded and indexed successfully.");
 }
