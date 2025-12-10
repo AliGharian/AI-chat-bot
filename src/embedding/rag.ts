@@ -2,62 +2,62 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { createClient } from "redis";
 import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
+import weaviate, { WeaviateClient } from "weaviate-ts-client";
 import dotenv from "dotenv";
+import { WeaviateStore } from "@langchain/weaviate";
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY || ""
-const redisPass = process.env.REDIS_PASSWORD || "";
-const REDIS_URL = `redis://default:${redisPass}@84.200.192.243:6379`;
+const apiKey = process.env.GEMINI_API_KEY || "";
+const WEAVIATE_HOST = "84.200.192.243:8080";
+const WEAVIATE_CLASS_NAME = "DocumentChunk";
 
 export async function runSimilaritySearch(userQuery: string, k: number = 4) {
-  const redisClient: any = createClient({ url: REDIS_URL });
+  const weaviateClient: any = weaviate.client({
+    scheme: "http",
+    host: WEAVIATE_HOST,
+  });
 
-  redisClient.on("error", (err: any) =>
-    console.error("Redis Client Error", err)
-  );
-
-  try {
-    await redisClient.connect();
-    console.log("✅ Connected to Redis for search.");
-
-    const embeddings = new GoogleGenerativeAIEmbeddings({
-      model: "text-embedding-004",
-      apiKey: apiKey,
-    });
-
-    const vectorStore = new RedisVectorStore(embeddings, {
-      redisClient: redisClient,
-      indexName: "bluechart_blog_vectors",
-    });
-
-    console.log(`Searching Redis for documents similar to: "${userQuery}"...`);
-
-    // 3. اجرای جستجوی تشابهی
-    const results = await vectorStore.similaritySearchWithScore(userQuery, k);
-
-    console.log(`\n🔎 Found ${results.length} relevant documents:`);
-
-    // 🚨 کد اصلاح شده: بررسی وجود _score در metadata
-    results.forEach(([doc, score], index) => {
-      const formattedScore = score;
-
-      console.log(`--- Document ${index + 1} (Score: ${formattedScore}) ---`);
-      console.log(`Title: ${JSON.stringify(doc)}`);
-      // console.log(`Title: ${doc.metadata.title}`);
-      // console.log(`Slug: ${doc.metadata.slug}`);
-      // نمایش بخشی از محتوا
-      // console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
-    });
-
-    const relevantDocs = results.map(([doc]) => doc);
-    return relevantDocs;
-  } catch (error) {
-    console.error("❌ ERROR DURING SEARCH:", error);
-  } finally {
-    if (redisClient && redisClient.isOpen) {
-      await redisClient.disconnect();
-    }
+  const isReady = await weaviateClient.misc.readyChecker().do();
+  if (!isReady) {
+    console.error("❌ Weaviate is not ready. Cannot perform search.");
+    return [];
   }
+  console.log("✅ Connected to Weaviate for search.");
+
+  const embeddings = new GoogleGenerativeAIEmbeddings({
+    model: "text-embedding-004",
+    apiKey: apiKey,
+  });
+
+  const vectorStore = await WeaviateStore.fromExistingIndex(embeddings, {
+    client: weaviateClient,
+    indexName: WEAVIATE_CLASS_NAME,
+    textKey: "content", // 💡 نام فیلد متنی در Schema
+    metadataKeys: ["sourceKey", "metadataJson"], // 💡 فیلدهایی که برای Metadata ذخیره کردیم
+  });
+
+  console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
+
+  // LangChain برای Weaviate از متد similaritySearch استفاده می‌کند
+  const results = await vectorStore.similaritySearch(userQuery, k);
+
+  console.log(`\n🔎 Found ${results.length} relevant documents:`);
+
+  results.forEach((doc, index) => {
+    // 💡 در LangChain WeaviateStore، متادیتا مستقیماً به doc.metadata تزریق می‌شود
+    console.log(`--- Document ${index + 1} ---`);
+    console.log(`Source Key: ${doc.metadata.sourceKey}`);
+    // محتوای metadataJson باید پارس شود تا عنوان اصلی استخراج شود
+    try {
+      const meta = JSON.parse(doc.metadata.metadataJson as string);
+      console.log(`Title: ${meta.title}`);
+    } catch (e) {
+      console.log(`Title: (Metadata Parse Error)`);
+    }
+    console.log(`Content Snippet: ${doc.pageContent.substring(0, 150)}...`);
+  });
+
+  return results;
 }
 
 const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -65,8 +65,17 @@ const ai = new GoogleGenAI({ apiKey: apiKey });
 function formatContext(documents: any[]): string {
   const context = documents
     .map((doc) => {
+      // 💡 اصلاح: پارس کردن metadataJson برای دسترسی به Title
+      let title = "N/A";
+      try {
+        const meta = JSON.parse(doc.metadata.metadataJson as string);
+        title = meta.title || "N/A";
+      } catch (e) {
+        // اگر پارس نشود، از N/A استفاده می‌کنیم
+      }
+
       // ساختاردهی برای خوانایی بهتر توسط LLM
-      return `[TITLE: ${doc.metadata.title}]\n${doc.pageContent}\n---`;
+      return `[TITLE: ${title}]\n${doc.pageContent}\n---`;
     })
     .join("\n");
 
@@ -108,85 +117,3 @@ export async function generateResponseWithRAG(userQuery: string) {
   console.log("✅ Final Answer from LLM received.");
   return finalAnswer;
 }
-
-// // 🎯 پرسش آزمایشی شما
-// runSimilaritySearch(
-//   "بهترین روش‌های برنامه‌ریزی مالی برای کسب‌وکارهای کوچک کدامند؟",
-//   5
-// ).then(() => console.log("\nSearch process finished."));
-
-// const relevant = [
-//   {
-//     pageContent: "اسپرد چیست؟",
-//     metadata: {
-//       id: "664f16bbd47be13182c9f8b6",
-//       title: "کمترین اسپرد آلپاری + کمیسیون حساب ecn آلپاری",
-//       slug: "alpari-spread",
-//       loc: { lines: { from: 11, to: 11 } },
-//     },
-//   },
-//   {
-//     pageContent: "اسکالپ چیست؟",
-//     metadata: {
-//       id: "67319616ae188247704b5678",
-//       title: "اسکالپ در ترید چیست؟ + بهترین استراتژی اسکالپینگ",
-//       slug: "what-is-scalp",
-//       loc: { lines: { from: 3, to: 3 } },
-//     },
-//   },
-//   {
-//     pageContent: "قراردادهای مشتقه",
-//     metadata: {
-//       id: "6742df361c2418ec2ba29b1c",
-//       title:
-//         "بازار نوظهور (emerging market) چیست؟ + مقایسه بازارهای نوظهور و بازارهای توسعه یافته",
-//       slug: "what-is-emerging-market",
-//       loc: { lines: { from: 66, to: 66 } },
-//     },
-//   },
-//   {
-//     pageContent: "نوع بروکر",
-//     metadata: {
-//       id: "6757fd1cffe0c998b6cc487e",
-//       title: "بهترین بروکرهای فارکس برای ایرانیان در سال 2025",
-//       slug: "best-brokers-2025",
-//       loc: { lines: { from: 43, to: 43 } },
-//     },
-//   },
-//   {
-//     pageContent: "تحلیل فاندامنتال",
-//     metadata: {
-//       id: "676d2c96c27689b5d95aae14",
-//       title: "انواع تحلیل در فارکس چیست؟ + روش های تحلیلی بازار فارکس",
-//       slug: "types-of-analysis-in-forex",
-//       loc: { lines: { from: 18, to: 18 } },
-//     },
-//   },
-//   {
-//     pageContent: "اروپای شمالی",
-//     metadata: {
-//       id: "683426aa356685ef51318b4e",
-//       title: "رگوله یا رگولیشن چیست؟ + مهم ترین نهادهای رگولاتوری در جهان",
-//       slug: "what-is-regulation",
-//       loc: { lines: { from: 32, to: 32 } },
-//     },
-//   },
-//   {
-//     pageContent: "اروپای شرقی",
-//     metadata: {
-//       id: "683426aa356685ef51318b4e",
-//       title: "رگوله یا رگولیشن چیست؟ + مهم ترین نهادهای رگولاتوری در جهان",
-//       slug: "what-is-regulation",
-//       loc: { lines: { from: 36, to: 36 } },
-//     },
-//   },
-//   {
-//     pageContent: "اروپای جنوبی",
-//     metadata: {
-//       id: "683426aa356685ef51318b4e",
-//       title: "رگوله یا رگولیشن چیست؟ + مهم ترین نهادهای رگولاتوری در جهان",
-//       slug: "what-is-regulation",
-//       loc: { lines: { from: 40, to: 40 } },
-//     },
-//   },
-// ];
