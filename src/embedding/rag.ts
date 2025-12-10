@@ -82,7 +82,7 @@ function formatContext(documents: Document[]): string {
 
 export async function runSimilaritySearch2(
   userQuery: string,
-  k: number = 4
+  k: number = 10
 ): Promise<Document[]> {
   const weaviateClient: WeaviateClient = weaviate.client({
     scheme: "http",
@@ -109,6 +109,8 @@ export async function runSimilaritySearch2(
 
   console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
 
+  console.log("Gemini Query Vector:\n", queryVector);
+
   // 3. اجرای جستجوی GraphQL بومی (Vector Search)
   const graphqlQuery = await weaviateClient.graphql
     .get()
@@ -125,8 +127,10 @@ export async function runSimilaritySearch2(
   // 4. پردازش و تبدیل نتایج به فرمت LangChain Document
   const results: any[] = graphqlQuery.data.Get[WEAVIATE_CLASS_NAME] || [];
 
+  console.log("\n\nGraphQL Search Results:\n", results);
+
   const relevantDocuments: Document[] = results.map((item, index) => {
-    // ساخت Document
+    // Create Document
     const doc = new Document({
       pageContent: item.content,
       metadata: {
@@ -134,16 +138,6 @@ export async function runSimilaritySearch2(
         metadataJson: undefined,
       },
     });
-
-    // 💡 نمایش نتیجه در کنسول
-    let title = "N/A";
-    try {
-      const meta = JSON.parse(item.metadataJson as string);
-      title = meta.title || "N/A";
-    } catch (e) {
-      /* silent */
-    }
-
     return doc;
   });
 
