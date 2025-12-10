@@ -114,7 +114,7 @@ export async function runSimilaritySearch2(
     .get()
     .withClassName(WEAVIATE_CLASS_NAME)
     // 💡 فیلدهایی که نیاز داریم برگردانده شوند
-    .withFields("content sourceKey metadataJson")
+    .withFields("content sourcekey metadatajson")
     .withNearVector({
       vector: queryVector,
       // distance: 0.2 // Optional: If you want to filter by distance threshold
