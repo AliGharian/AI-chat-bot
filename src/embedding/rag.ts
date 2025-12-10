@@ -105,9 +105,9 @@ export async function runSimilaritySearch2(
     apiKey: apiKey,
   });
 
-  const queryVector = await embeddings.embedQuery(userQuery);
-
   console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
+
+  const queryVector = await embeddings.embedQuery(userQuery);
 
   console.log("Gemini Query Vector:\n", queryVector);
 
