@@ -74,7 +74,7 @@ function formatContext(documents: Document[]): string {
       } catch (e) {
         // ...
       }
-      return `[TITLE: ${title}]\n${doc.pageContent}\n---`;
+      return `[TITLE: ${doc.pageContent}]\n${doc.pageContent}\n---`;
     })
     .join("\n");
   return context.trim();
