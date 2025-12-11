@@ -18,62 +18,63 @@ const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
 
 /* ---------- Helper Functions for RAG ---------- */
 function formatContext(documents: Document[]): string {
-  if (documents.length === 0) return "No relevant documents found.";
   const context = documents
-    .map((doc, index) => {
-      return `\n${doc.pageContent}\n`;
+    .map((doc) => {
+      return `${doc.pageContent}\n---`;
     })
-    .join("---\n");
+    .join("\n");
   return context.trim();
 }
 
-async function runSimilaritySearch(
+export async function runSimilaritySearch(
   userQuery: string,
-  k: number = 8
+  k: number = 10
 ): Promise<Document[]> {
+  //! Define Weaviate client
   const weaviateClient: WeaviateClient = weaviate.client({
     scheme: "http",
     host: WEAVIATE_HOST,
   });
 
-  try {
-    const isReady = await weaviateClient.misc.readyChecker().do();
-    if (!isReady) {
-      console.error("Weaviate is not ready. Skipping RAG search.");
-      return [];
-    }
-
-    const graphqlQuery = await weaviateClient.graphql
-      .get()
-      .withClassName(WEAVIATE_CLASS_NAME)
-      .withFields("content _additional { id distance }")
-      .withNearText({
-        concepts: [userQuery],
-      })
-      .withLimit(k)
-      .do();
-
-    const results: any[] = graphqlQuery.data.Get?.[WEAVIATE_CLASS_NAME] || [];
-
-    console.log(
-      `RAG Search successful. Fetched ${results.length} relevant chunks.`
-    );
-
-    const relevantDocuments: Document[] = results.map((item) => {
-      return new Document({
-        pageContent: item.content,
-        metadata: {
-          id: item._additional.id,
-          distance: item._additional.distance,
-        },
-      });
-    });
-
-    return relevantDocuments;
-  } catch (error) {
-    console.error("RAG Search failed:", error);
+  const isReady = await weaviateClient.misc.readyChecker().do();
+  if (!isReady) {
+    console.error("❌ Weaviate is not ready. Cannot perform search.");
     return [];
   }
+  console.log(
+    "✅ Connected to Weaviate for search. Using native GraphQL search."
+  );
+  //? -------------------------------------------
+
+  console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
+
+  const graphqlQuery = await weaviateClient.graphql
+    .get()
+    .withClassName(WEAVIATE_CLASS_NAME)
+    .withFields("content _additional { id distance }")
+    .withNearText({
+      concepts: [userQuery],
+    })
+    .withLimit(k)
+    .do();
+
+  const results: any[] = graphqlQuery.data.Get?.[WEAVIATE_CLASS_NAME] || [];
+
+  console.log("\n\nGraphQL Search Results:\n", results);
+
+  const relevantDocuments: Document[] = results.map((item, index) => {
+    // Create Document
+    const doc = new Document({
+      pageContent: item.content,
+      metadata: {
+        id: item._additional.id,
+        distance: item._additional.distance,
+      },
+    });
+    return doc;
+  });
+
+  return relevantDocuments;
 }
 
 /* ---------- TYPES ---------- */
@@ -123,6 +124,8 @@ export class GeminiClient {
   async generateText(options: GenerateOptions): Promise<void> {
     const model = options.model ?? "gemini-2.5-flash";
     const userQuery = options.prompt;
+    const history = options.history ?? "";
+    const pageUrl = options.pageUrl ?? "";
     const tools: ToolListUnion = [
       {
         functionDeclarations: FUNCTION_DECLARATION,
@@ -138,22 +141,22 @@ export class GeminiClient {
     };
 
     const relevantDocuments = await runSimilaritySearch(userQuery, 5);
-    const contextText = formatContext(relevantDocuments);
-    console.log("Context text is: ", contextText)
+    const context = formatContext(relevantDocuments);
+    console.log("Context text is: ", context);
     const ragPrompt: string = `
         Instructions:
         1. Only use Function Call tools if the required answer is NOT available in the 'CONTEXT_DATA' provided below.
         2. Answer the 'USER_QUERY' strictly based on the 'CONTEXT_DATA' and the chat history (if relevant).
         3. The response must be comprehensive, respectful, and fluent in Persian (Farsi).
 
+         --- CONTEXT_DATA (Knowledge Base) ---
+        ${context}
+
+        Current Page URL: "${pageUrl ?? ""}"
+
         This is the chat history between the user and the assistant:
-          ${options.history}
-
-        --- CONTEXT_DATA (Knowledge Base) ---
-        ${contextText}
-
-        Current Page URL: "${options.pageUrl ?? ""}"
-
+        ${history}
+        
         USER_QUERY:
         ${userQuery}
     `;
@@ -168,6 +171,8 @@ export class GeminiClient {
         ],
       },
     ];
+
+    console.log("First content is: ", firstContent);
 
     try {
       /* ---------- First Step Call the Model ---------- */
@@ -204,7 +209,6 @@ export class GeminiClient {
           },
         };
         // --- FIX IS HERE ---
-        // باید کل تاریخچه قبلی را هم بفرستید
 
         const followupContents: ContentListUnion = [
           ...firstContent,
