@@ -21,9 +21,7 @@ function formatContext(documents: Document[]): string {
   if (documents.length === 0) return "No relevant documents found.";
   const context = documents
     .map((doc, index) => {
-      return `[CHUNK ${index + 1}, Distance: ${doc.metadata.distance.toFixed(
-        4
-      )}]\n${doc.pageContent}\n`;
+      return `\n${doc.pageContent}\n`;
     })
     .join("---\n");
   return context.trim();
@@ -139,7 +137,7 @@ export class GeminiClient {
       maxOutputTokens: options.maxOutputTokens,
     };
 
-    const relevantDocuments = await runSimilaritySearch(userQuery, 20);
+    const relevantDocuments = await runSimilaritySearch(userQuery, 5);
     const contextText = formatContext(relevantDocuments);
 
     const ragPrompt: string = `
