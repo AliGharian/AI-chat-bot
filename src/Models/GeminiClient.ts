@@ -139,7 +139,7 @@ export class GeminiClient {
 
     const relevantDocuments = await runSimilaritySearch(userQuery, 5);
     const contextText = formatContext(relevantDocuments);
-
+    console.log("Context text is: ", contextText)
     const ragPrompt: string = `
         Instructions:
         1. Only use Function Call tools if the required answer is NOT available in the 'CONTEXT_DATA' provided below.
