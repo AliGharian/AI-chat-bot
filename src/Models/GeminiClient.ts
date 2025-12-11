@@ -172,7 +172,7 @@ export class GeminiClient {
       },
     ];
 
-    console.log("First content is: ", firstContent);
+    console.log("First content is: ", JSON.stringify(firstContent));
 
     try {
       /* ---------- First Step Call the Model ---------- */
