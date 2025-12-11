@@ -145,39 +145,6 @@ app.post("/api/stream", async (req, res) => {
 
   const historyText = buildHistoryPrompt(lastMessages.reverse());
 
-  const url = extractUrl(prompt);
-
-  let pageText = "";
-
-  if (url) {
-    console.log("Fetching URL:", url);
-    const html = await fetchPageContent(url);
-
-    if (html) {
-      pageText = stripHtml(html);
-      console.log("HTML extracted length:", pageText.length);
-    }
-  }
-
-  const finalPrompt = `
-          این چت‌ سابق بین کاربر و دستیار:
-
-          ${historyText}
-
-          --------------------
-          سؤال جدید کاربر:
-          ${prompt}
-          --------------------
-
-          ${
-            url
-              ? `کاربر لینک داده: ${url}
-          خلاصه محتوای صفحه:
-          ${pageText.substring(0, 30000)}
-          `
-              : ""
-          }
-          `;
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("Transfer-Encoding", "chunked");
@@ -203,7 +170,8 @@ app.post("/api/stream", async (req, res) => {
 
   try {
     await gemini.generateText({
-      prompt: finalPrompt,
+      prompt,
+      history: historyText,
       pageUrl: pageUrl,
       onData: (chunk: any) => {
         botFullText += chunk;
@@ -274,16 +242,6 @@ app.post("/api/chat", async (req, res) => {
 
   const historyText = buildHistoryPrompt(lastMessages.reverse());
 
-  const finalPrompt = `
-          این چت‌ سابق بین کاربر و دستیار:
-
-          ${historyText}
-
-          --------------------
-          سؤال جدید کاربر:
-          ${prompt}
-          --------------------
-          `;
 
   try {
     const result = await generateResponseWithRAG(prompt);

@@ -7,11 +7,83 @@ import {
 import { getAssetPrice, getForexEconomicNews, scrapePage } from "../utils";
 import { SYSTEM_INSTRUCTION } from "./systemInstruction";
 import { FUNCTION_DECLARATION } from "./functionDeclaration";
+import { Document } from "langchain";
+import weaviate, { WeaviateClient } from "weaviate-ts-client";
+import dotenv from "dotenv";
+dotenv.config();
+
+/* ---------- Weaviate Configuration ---------- */
+const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
+const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
+
+/* ---------- Helper Functions for RAG ---------- */
+function formatContext(documents: Document[]): string {
+  if (documents.length === 0) return "No relevant documents found.";
+  const context = documents
+    .map((doc, index) => {
+      return `[CHUNK ${index + 1}, Distance: ${doc.metadata.distance.toFixed(
+        4
+      )}]\n${doc.pageContent}\n`;
+    })
+    .join("---\n");
+  return context.trim();
+}
+
+async function runSimilaritySearch(
+  userQuery: string,
+  k: number = 8
+): Promise<Document[]> {
+  const weaviateClient: WeaviateClient = weaviate.client({
+    scheme: "http",
+    host: WEAVIATE_HOST,
+  });
+
+  try {
+    const isReady = await weaviateClient.misc.readyChecker().do();
+    if (!isReady) {
+      console.error("Weaviate is not ready. Skipping RAG search.");
+      return [];
+    }
+
+    const graphqlQuery = await weaviateClient.graphql
+      .get()
+      .withClassName(WEAVIATE_CLASS_NAME)
+      .withFields("content _additional { id distance }")
+      .withNearText({
+        concepts: [userQuery],
+        distance: 0.35,
+      })
+      .withLimit(k)
+      .do();
+
+    const results: any[] = graphqlQuery.data.Get?.[WEAVIATE_CLASS_NAME] || [];
+
+    console.log(
+      `RAG Search successful. Fetched ${results.length} relevant chunks.`
+    );
+
+    const relevantDocuments: Document[] = results.map((item) => {
+      return new Document({
+        pageContent: item.content,
+        metadata: {
+          id: item._additional.id,
+          distance: item._additional.distance,
+        },
+      });
+    });
+
+    return relevantDocuments;
+  } catch (error) {
+    console.error("RAG Search failed:", error);
+    return [];
+  }
+}
 
 /* ---------- TYPES ---------- */
 interface GenerateOptions {
   model?: string;
   prompt: string;
+  history?: string;
   pageUrl?: string;
   temperature?: number;
   topP?: number;
@@ -53,7 +125,7 @@ export class GeminiClient {
 
   async generateText(options: GenerateOptions): Promise<void> {
     const model = options.model ?? "gemini-2.5-flash";
-
+    const userQuery = options.prompt;
     const tools: ToolListUnion = [
       {
         functionDeclarations: FUNCTION_DECLARATION,
@@ -68,21 +140,33 @@ export class GeminiClient {
       maxOutputTokens: options.maxOutputTokens,
     };
 
+    const relevantDocuments = await runSimilaritySearch(userQuery, 20);
+    const contextText = formatContext(relevantDocuments);
+
+    const ragPrompt: string = `
+        Instructions:
+        1. Only use Function Call tools if the required answer is NOT available in the 'CONTEXT_DATA' provided below.
+        2. Answer the 'USER_QUERY' strictly based on the 'CONTEXT_DATA' and the chat history (if relevant).
+        3. The response must be comprehensive, respectful, and fluent in Persian (Farsi).
+
+        This is the chat history between the user and the assistant:
+          ${history}
+
+        --- CONTEXT_DATA (Knowledge Base) ---
+        ${contextText}
+
+        Current Page URL: "${options.pageUrl ?? ""}"
+
+        USER_QUERY:
+        ${userQuery}
+    `;
+
     const firstContent: ContentListUnion = [
       {
         role: "user",
         parts: [
           {
-            text: `
-          CONTEXT_DATA:
-          Current Page URL: "${options.pageUrl ?? ""}"
-
-          USER_QUERY:
-          ${options.prompt}
-          
-          Instructions:
-          If the query requires reading the page, call scrapePage with the URL provided in CONTEXT_DATA.
-        `,
+            text: ragPrompt,
           },
         ],
       },

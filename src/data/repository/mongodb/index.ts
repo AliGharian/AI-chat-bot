@@ -18,7 +18,7 @@ export class MongoDatabaseManager implements IDatabase {
 
   static getInstance(databaseURL?: string): MongoDatabaseManager {
     // const databaseURLStatic = `${process.env.DATABASE_URL}/${process.env.DATABASE_NAME}`;
-    const databaseURLStatic = `${process.env.DATABASE_URL}`;
+    const databaseURLStatic = `${process.env.DATABASE_URL}/${process.env.DATABASE_NAME}`;
     if (!MongoDatabaseManager.instance) {
       MongoDatabaseManager.instance = new MongoDatabaseManager(
         databaseURL ?? databaseURLStatic
