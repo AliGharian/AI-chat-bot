@@ -9,8 +9,9 @@ import { Document } from "@langchain/core/documents";
 dotenv.config();
 
 const apiKey = process.env.GEMINI_API_KEY || "";
-const WEAVIATE_HOST = "84.200.192.243:8080";
-const WEAVIATE_CLASS_NAME = "DocumentChunk";
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "";
+const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
+const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
 
 export async function runSimilaritySearch(userQuery: string, k: number = 4) {
   const weaviateClient: any = weaviate.client({
@@ -101,7 +102,7 @@ export async function runSimilaritySearch2(
 
   // 2. تولید وکتور از کوئری کاربر
   const embeddings = new GoogleGenerativeAIEmbeddings({
-    model: "text-embedding-004",
+    model: EMBEDDING_MODEL,
     apiKey: apiKey,
   });
 

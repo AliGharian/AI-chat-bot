@@ -1,7 +1,6 @@
 import { Document } from "@langchain/core/documents";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { fetchBlogPostsFromMongo } from "./data";
-import { GoogleGenAI } from "@google/genai";
 import weaviate, { WeaviateClient } from "weaviate-ts-client";
 import dotenv from "dotenv";
 import { chunkArray, extractRawText } from "../utils";
@@ -11,6 +10,7 @@ const API_KEYS = JSON.parse(process.env.GOOGLE_GENAI_API_KEYS ?? "[]");
 const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
 const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
 const BATCH_SIZE = 90;
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "";
 
 async function indexBlogPosts() {
   //! 1. Connect to Weaviate(vector database)
@@ -63,7 +63,10 @@ async function indexBlogPosts() {
   //?---------------------------------------------
 
   //! 5. Generate smaller chunks documents
-  const chunkedBatches:Document[][] = chunkArray<Document>(chunkedDocuments, BATCH_SIZE);
+  const chunkedBatches: Document[][] = chunkArray<Document>(
+    chunkedDocuments,
+    BATCH_SIZE
+  );
 
   const totalChunks = chunkedDocuments.length;
   let indexedCount = 0;
@@ -72,85 +75,47 @@ async function indexBlogPosts() {
     `Starting batched embedding in ${chunkedBatches.length} batches (size: ${BATCH_SIZE})...`
   );
 
-  let currentKeyIndex = 0;
-  let currentAPIKey = API_KEYS[currentKeyIndex];
-  let processingSucceeded = false;
-  console.log("API KEY LIST IS: ", API_KEYS);
+  try {
+    for (let i = 0; i < chunkedBatches.length; i++) {
+      const batch: Document[] = chunkedBatches[i];
+      const batcher = weaviateClient.batch.objectsBatcher(); // ❌ مرحله تولید وکتور با GoogleGenAI کاملاً حذف شد. // const ai = new GoogleGenAI... // const response: EmbedContentResponse...
 
-  while (currentKeyIndex < API_KEYS.length && !processingSucceeded) {
-    const ai = new GoogleGenAI({ apiKey: currentAPIKey });
-    try {
-      for (let i = Math.floor(indexedCount / BATCH_SIZE);i < chunkedBatches.length;i++) {
-        const batch:Document[] = chunkedBatches[i];
+      for (let j = 0; j < batch.length; j++) {
+        const doc = batch[j];
+        const dataObject = {
+          content: doc.pageContent,
+          sourceKey: doc.metadata.sourceKey,
+          metadataJson: doc.metadata.metadataJson,
+        };
 
-        // Generate Vectors
-        const batchTexts = batch.map((doc) => doc.pageContent);
-        const response: any = await ai.models.embedContent({
-          model: "text-embedding-004",
-          contents: batchTexts,
+        batcher.withObject({
+          class: WEAVIATE_CLASS_NAME,
+          properties: dataObject,
         });
-
-        const correctedVectors = response.embeddings.map((v: any) => v.values);
-
-        const batcher = weaviateClient.batch.objectsBatcher();
-
-        for (let j = 0; j < batch.length; j++) {
-          const doc = batch[j];
-          const vector = correctedVectors[j];
-
-          //Create
-          const dataObject = {
-            content: doc.pageContent,
-            sourceKey: doc.metadata.sourceKey,
-            metadataJson: doc.metadata.metadataJson,
-          };
-
-          batcher.withObject({
-            class: WEAVIATE_CLASS_NAME,
-            properties: dataObject,
-            vector: vector,
-          });
-        }
-
-        // Execute batch
-        await batcher.do();
-
-        indexedCount += batch.length;
-        console.log(
-          `Indexed ${indexedCount} of ${totalChunks} chunks. (Batch: ${i + 1}/${
-            chunkedBatches.length
-          })`
-        );
-        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      processingSucceeded = true;
-    } catch (error: any) {
-      if (error.status === 400 || error.message.includes("API key expired")) {
+      const errors = await batcher.do();
+
+      const errorResults = errors.filter((e: any) => e.result.errors);
+      if (errorResults.length > 0) {
         console.error(
-          `API Error (Status 400 or Expired Key) occurred at chunk ${indexedCount}.`
+          "Batching errors occurred. Weaviate failed to index or vectorize data."
         );
-        currentKeyIndex++;
-
-        if (currentKeyIndex >= API_KEYS.length) {
-          console.error(
-            "All API keys have failed or expired. Stopping process."
-          );
-          throw new Error("All API keys failed.");
-        } else {
-          currentAPIKey = API_KEYS[currentKeyIndex];
-          console.warn(
-            `Switching to the next key (Index: ${
-              currentKeyIndex + 1
-            }). Resuming from chunk ${indexedCount}.`
-          );
-          // Continue to the next iteration of the while loop to retry with the new key
-        }
-      } else {
-        console.error("UNEXPECTED CRITICAL ERROR:", error);
-        throw error;
+        console.error(JSON.stringify(errorResults, null, 2));
+        throw new Error("Weaviate Batch Failed.");
       }
+
+      indexedCount += batch.length;
+      console.log(
+        `Indexed ${indexedCount} of ${totalChunks} chunks. (Batch: ${i + 1}/${
+          chunkedBatches.length
+        })`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
+  } catch (error: any) {
+    console.error("CRITICAL ERROR during Weaviate Indexing:", error);
+    throw error;
   }
 
   console.log("Blog posts have been embedded and indexed successfully.");
