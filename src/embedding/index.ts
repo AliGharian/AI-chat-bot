@@ -48,7 +48,6 @@ async function indexBlogPosts() {
   });
 
   console.log(`Total raw blog posts fetched: ${rawDocs.length}`);
-  console.log("Last raw document:", rawDocs[0]);
   //? ------------------------------------------
 
   //! 4. Split documents into smaller chunks
