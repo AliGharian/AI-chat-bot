@@ -4,86 +4,16 @@ import { fetchBlogPostsFromMongo } from "./data";
 import { GoogleGenAI } from "@google/genai";
 import weaviate, { WeaviateClient } from "weaviate-ts-client";
 import dotenv from "dotenv";
+import { chunkArray, extractRawText } from "../utils";
 dotenv.config();
 
 const API_KEYS = JSON.parse(process.env.GOOGLE_GENAI_API_KEYS ?? "[]");
-const WEAVIATE_HOST = "84.200.192.243:8080";
-const WEAVIATE_CLASS_NAME = "DocumentChunk";
-
-function extractTextFromChildren(children: any[]): string {
-  return children
-    .map((child) => {
-      // 1. Base case: If the 'text' field exists, return its content.
-      if (child.text) {
-        return child.text;
-      }
-
-      // 2. Recursive step: If the node has its own 'children' (e.g., nested formatting or blocks),
-      //    call the function again to extract text from that layer.
-      if (child.children && Array.isArray(child.children)) {
-        return extractTextFromChildren(child.children);
-      }
-
-      // Ignore other complex nodes (like empty objects)
-      return "";
-    })
-    .join(" ");
-}
-
-function extractRawText(contentBlocks: any): string {
-  let rawText = "";
-
-  const blocks: any[] = JSON.parse(contentBlocks);
-  for (const block of blocks) {
-    // Skip non-textual blocks like images and custom components (CTAs).
-    if (["image", "target"].includes(block.type)) {
-      // Optional: Include caption text if available
-      if (block.caption) {
-        rawText += `[Caption: ${block.caption}]\n`;
-      }
-      continue;
-    }
-
-    // 🎯 Special handling for list blocks (e.g., bulleted-list)
-    if (block.type && ["list"].includes(block.type) && block.children) {
-      block.children.forEach((listItem: any) => {
-        if (listItem.type === "list-item" && listItem.children) {
-          const listItemText = extractTextFromChildren(listItem.children);
-          // Use a marker for list items to maintain structure
-          rawText += `* ${listItemText}\n`;
-        }
-      });
-      rawText += "\n"; // Add spacing after the list
-      continue;
-    }
-
-    // General handling for textual blocks (paragraph, heading, etc.)
-    if (block.children && Array.isArray(block.children)) {
-      const extracted = extractTextFromChildren(block.children);
-
-      // Only add text if content was actually extracted
-      if (extracted.trim().length > 0) {
-        // Add double newline to clearly separate chunks during splitting
-        rawText += extracted + "\n\n";
-      }
-    }
-  }
-
-  return rawText.trim();
-}
-
+const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
+const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
 const BATCH_SIZE = 90;
 
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
-  return result;
-}
-
 async function indexBlogPosts() {
-  // 1. Connect to Weaviate
+  //! 1. Connect to Weaviate(vector database)
   const weaviateClient: WeaviateClient = weaviate.client({
     scheme: "http",
     host: WEAVIATE_HOST,
@@ -91,20 +21,19 @@ async function indexBlogPosts() {
 
   const isReady = await weaviateClient.misc.readyChecker().do();
   if (!isReady) {
-    console.error(
-      "❌ Weaviate is not ready. Please check the Docker container."
-    );
+    console.error("Weaviate is not ready. Please check the Docker container.");
     return;
   }
-  console.log(`✅ Connected to Weaviate at ${WEAVIATE_HOST}. Server is ready.`);
+  console.log(`Connected to Weaviate at ${WEAVIATE_HOST}. Server is ready.`);
+  //?-------------------------------------------
 
-  // Fetch blog post data from MongoDB
+  //! 2. Fetch blog post data from MongoDB
   const blogPostData: any[] = await fetchBlogPostsFromMongo();
-  // ------------------------------------------
+  //? ------------------------------------------
+
   console.log("Starting the embedding and indexing process...");
 
-  console.log("First blog post data:  ", blogPostData[0].content); // 1.1: تولید Raw Docs
-
+  //! 3. Extract the raw Documents from blog posts
   const rawDocs: Document[] = blogPostData.map((post) => {
     const cleanedContent = extractRawText(post.content);
 
@@ -120,17 +49,22 @@ async function indexBlogPosts() {
 
   console.log(`Total raw blog posts fetched: ${rawDocs.length}`);
   console.log("Last raw document:", rawDocs[0]);
+  //? ------------------------------------------
 
+  //! 4. Split documents into smaller chunks
   const splitter = new RecursiveCharacterTextSplitter({
     chunkSize: 500,
     chunkOverlap: 50,
   });
 
-  const chunkedDocuments: any[] = await splitter.splitDocuments(rawDocs);
+  const chunkedDocuments: Document[] = await splitter.splitDocuments(rawDocs);
 
-  console.log(`Blog posts after chunking: ${chunkedDocuments.length}`); // 1.3: آماده‌سازی Batching
+  console.log(`Blog posts after chunking: ${chunkedDocuments.length}`);
+  //?---------------------------------------------
 
-  const chunkedBatches = chunkArray(chunkedDocuments, BATCH_SIZE);
+  //! 5. Generate smaller chunks documents
+  const chunkedBatches:Document[][] = chunkArray<Document>(chunkedDocuments, BATCH_SIZE);
+
   const totalChunks = chunkedDocuments.length;
   let indexedCount = 0;
 
@@ -141,20 +75,15 @@ async function indexBlogPosts() {
   let currentKeyIndex = 0;
   let currentAPIKey = API_KEYS[currentKeyIndex];
   let processingSucceeded = false;
-
   console.log("API KEY LIST IS: ", API_KEYS);
+
   while (currentKeyIndex < API_KEYS.length && !processingSucceeded) {
     const ai = new GoogleGenAI({ apiKey: currentAPIKey });
-
     try {
-      for (
-        let i = Math.floor(indexedCount / BATCH_SIZE);
-        i < chunkedBatches.length;
-        i++
-      ) {
-        const batch = chunkedBatches[i];
+      for (let i = Math.floor(indexedCount / BATCH_SIZE);i < chunkedBatches.length;i++) {
+        const batch:Document[] = chunkedBatches[i];
 
-        // Generate vectors
+        // Generate Vectors
         const batchTexts = batch.map((doc) => doc.pageContent);
         const response: any = await ai.models.embedContent({
           model: "text-embedding-004",
@@ -165,9 +94,9 @@ async function indexBlogPosts() {
 
         const batcher = weaviateClient.batch.objectsBatcher();
 
-        for (let k = 0; k < batch.length; k++) {
-          const doc = batch[k];
-          const vector = correctedVectors[k];
+        for (let j = 0; j < batch.length; j++) {
+          const doc = batch[j];
+          const vector = correctedVectors[j];
 
           //Create
           const dataObject = {
@@ -188,9 +117,9 @@ async function indexBlogPosts() {
 
         indexedCount += batch.length;
         console.log(
-          `✅ Indexed ${indexedCount} of ${totalChunks} chunks. (Batch: ${
-            i + 1
-          }/${chunkedBatches.length})`
+          `Indexed ${indexedCount} of ${totalChunks} chunks. (Batch: ${i + 1}/${
+            chunkedBatches.length
+          })`
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
@@ -218,7 +147,7 @@ async function indexBlogPosts() {
           // Continue to the next iteration of the while loop to retry with the new key
         }
       } else {
-        console.error("❌ UNEXPECTED CRITICAL ERROR:", error);
+        console.error("UNEXPECTED CRITICAL ERROR:", error);
         throw error;
       }
     }

@@ -40,7 +40,7 @@ export function buildHistoryPrompt(messages: IMessage[]) {
 export async function scrapePage(url: string): Promise<string> {
   try {
     const html = await fetch(url).then((res) => res.text());
-    const clean = html.replace(/<[^>]*>?/gm, " "); // ساده‌ترین پاکسازی
+    const clean = html.replace(/<[^>]*>?/gm, " ");
     return clean.substring(0, 20000);
   } catch (err) {
     return "Error scraping page.";
@@ -61,10 +61,6 @@ export async function getAssetPrice(symbol: string) {
 
     const data = await response.json();
 
-    // طلا در این API با نماد "XAU/USD" یا "Gold/USD" مشخص نیست،
-    // اما فرض می‌کنیم که API شما حاوی نماد مورد نظر برای اونس طلا باشد.
-    // اگر نماد دقیق "XAU/USD" در لیست باشد، از آن استفاده می‌کنیم.
-    // اگرچه در نمونه JSON شما وجود ندارد، اما برای منطق، آن را اضافه می‌کنیم.
     const asset = data.currencyPairs.find(
       (pair: any) =>
         pair.SymbolName.toUpperCase() === symbol.toUpperCase() ||
@@ -105,13 +101,11 @@ export async function getForexEconomicNews(args: {
 }) {
   const { countryCodes, startDate, endDate } = args;
 
-  // تبدیل تاریخ‌ها به فرمت UTC با T00:00:00.000Z
   const fromDate = new Date(`${startDate}T00:00:00.000Z`).toISOString();
   const toDate = new Date(`${endDate}T23:59:59.999Z`).toISOString(); // تا پایان روز
 
   const url = new URL("https://economic-calendar.tradingview.com/events");
 
-  // تنظیم پارامترها در URL
   url.searchParams.set("countries", countryCodes.toUpperCase());
   url.searchParams.set("from", fromDate);
   url.searchParams.set("to", toDate);
@@ -120,14 +114,12 @@ export async function getForexEconomicNews(args: {
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
-        // هدر Origin مورد نیاز تریدینگ‌ویو
         Origin: "https://www.tradingview.com",
         "User-Agent": "Mozilla/5.0 (Custom Agent for SafeBroker)",
       },
     });
 
     if (!response.ok) {
-      // اگر پاسخ موفقیت آمیز نبود
       return {
         success: false,
         result: `Error fetching news: Status ${response.status} - ${response.statusText}`,
@@ -136,7 +128,6 @@ export async function getForexEconomicNews(args: {
 
     const data = await response.json();
 
-    // تنها اطلاعات کلیدی را برای مدل برگردانید
     const simplifiedEvents = data.result.map((event: any) => ({
       id: event.id,
       date: event.date,
@@ -148,7 +139,6 @@ export async function getForexEconomicNews(args: {
       previous: event.previous,
     }));
 
-    // نتیجه را به Gemini برگردانید تا خلاصه کند
     return {
       success: true,
       result: JSON.stringify(simplifiedEvents),
@@ -160,4 +150,75 @@ export async function getForexEconomicNews(args: {
       result: `An exception occurred during the API call: ${error.message}`,
     };
   }
+}
+
+export function extractTextFromChildren(children: any[]): string {
+  return children
+    .map((child) => {
+      // 1. Base case: If the 'text' field exists, return its content.
+      if (child.text) {
+        return child.text;
+      }
+
+      // 2. Recursive step: If the node has its own 'children' (e.g., nested formatting or blocks),
+      //    call the function again to extract text from that layer.
+      if (child.children && Array.isArray(child.children)) {
+        return extractTextFromChildren(child.children);
+      }
+
+      // Ignore other complex nodes (like empty objects)
+      return "";
+    })
+    .join(" ");
+}
+
+export function extractRawText(contentBlocks: any): string {
+  let rawText = "";
+
+  const blocks: any[] = JSON.parse(contentBlocks);
+  for (const block of blocks) {
+    // Skip non-textual blocks like images and custom components (CTAs).
+    if (["image", "target"].includes(block.type)) {
+      // Optional: Include caption text if available
+      if (block.caption) {
+        rawText += `[Caption: ${block.caption}]\n`;
+      }
+      continue;
+    }
+
+    // Special handling for list blocks (e.g., bulleted-list)
+    if (block.type && ["list"].includes(block.type) && block.children) {
+      block.children.forEach((listItem: any) => {
+        if (listItem.type === "list-item" && listItem.children) {
+          const listItemText = extractTextFromChildren(listItem.children);
+          // Use a marker for list items to maintain structure
+          rawText += `* ${listItemText}\n`;
+        }
+      });
+      rawText += "\n"; // Add spacing after the list
+      continue;
+    }
+
+    // General handling for textual blocks (paragraph, heading, etc.)
+    if (block.children && Array.isArray(block.children)) {
+      const extracted = extractTextFromChildren(block.children);
+
+      // Only add text if content was actually extracted
+      if (extracted.trim().length > 0) {
+        // Add double newline to clearly separate chunks during splitting
+        rawText += extracted + "\n\n";
+      }
+    }
+  }
+
+  return rawText.trim();
+}
+
+
+export function chunkArray<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
 }
