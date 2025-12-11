@@ -11,7 +11,7 @@ import {
   fetchPageContent,
   stripHtml,
 } from "./utils";
-import { generateResponseWithRAG, } from "./embedding/rag";
+import { generateResponseWithRAG } from "./embedding/rag";
 dotenv.config();
 
 var cors = require("cors");
@@ -286,8 +286,8 @@ app.post("/api/chat", async (req, res) => {
           `;
 
   try {
-    const [result, queryVector] = await generateResponseWithRAG(prompt);
-    return res.status(200).json({ result, vector: queryVector });
+    const result = await generateResponseWithRAG(prompt);
+    return res.status(200).json({ result });
   } catch (err: any) {
     console.error("Gemini API error:", err);
     if (!res.headersSent) {
@@ -301,63 +301,3 @@ app.post("/api/chat", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
 });
-
-// const GenerateContentResponse =  {
-//     sdkHttpResponse: {
-//       headers: {
-//         'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000',
-//         'content-encoding': 'gzip',
-//         'content-type': 'application/json; charset=UTF-8',
-//         date: 'Wed, 19 Nov 2025 08:04:18 GMT',
-//         server: 'scaffolding on HTTPServer2',
-//         'server-timing': 'gfet4t7; dur=1767',
-//         'transfer-encoding': 'chunked',
-//         vary: 'Origin, X-Origin, Referer',
-//         'x-content-type-options': 'nosniff',
-//         'x-frame-options': 'SAMEORIGIN',
-//         'x-xss-protection': '0'
-//       }
-//     },
-//     candidates: [ { content: [Object], finishReason: 'STOP', index: 0 } ],
-//     modelVersion: 'gemini-2.5-flash',
-//     responseId: 'AnodafWJBJrunsEP093D6AI',
-//     usageMetadata: {
-//       promptTokenCount: 7414,
-//       candidatesTokenCount: 82,
-//       totalTokenCount: 7602,
-//       promptTokensDetails: [ [Object] ],
-//       thoughtsTokenCount: 106
-//     }
-//   }
-
-// const CallParts = {
-//   parts: [
-//     {
-//       functionCall: [Object],
-//       thoughtSignature:
-//         "CqIDAdHtim8QE8Qr8EQAnD3SR43Udiz5HIgzrqa0wM56pBNroZMSgeqil4S99nglp9EAZBEcltjb07nYAijhhbPmre+O0n4mAYHpgP6DoSveCm1DoxDjoalPiGMxyAsxpgwADoWf+2mdFNGAx2RydYS/zlP8Rt7nUHqB8kbx5HHDM66KdCof+ZGT+0rms7u0S++t17rvoZIg/IMCDnWuXXPq5GejIuB9OmbEqt0W8RILJ+TIgtPZ+sDavbyQhZssSe1ZKvR1JNAlqeWLCJohaJAK/8v8StoFIx1xUS11l0zHokhiTv4VWG0m5+4l6YTFOUShzMx/mXjdTLx1boHlmAxVS9KZrRcHgjaDYoFiEXjSAHm2HUDxqNbKj+FeVGVJ6PpcVjRv/V73bZVoIZ+NLxACalyX3XfNJLeZq//+VWQTZxYoH33xiqFeU4kALAzF3in8yE7LpH9e5pZ+znL+2VkDkEBPt4pXJrJZ6P2jNiNAqeNBq4Yh+2g2iVDOJj7Ysa4adYoMx0uI+D1Bq/BYw8AiyH15e9g4sFXJB+lbUp26vLZORg==",
-//     },
-//   ],
-//   role: "model",
-// };
-
-//   const ActionCall =   {
-//     name: 'scrapePage',
-//     args: { url: 'https://safebroker.org/blog/how-add-indicator-mt4-mt5' }
-//   }
-
-//    const StreamError: ApiError = {"error":{"message":"{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Please ensure that function response turn comes immediately after a function call turn.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n","code":400,"status":"Bad Request"}}
-//       at throwErrorIfNotOK (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:11430:30)
-//       at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-//       at async /var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:11183:13
-//       at async Models.generateContentStream (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:12572:24) {
-//     status: 400
-//   }
-
-// const StreamError: ApiError = {"error":{"message":"{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/usage?tab=rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 10, model: gemini-2.5-flash\\nPlease retry in 22.421756398s.\",\n    \"status\": \"RESOURCE_EXHAUSTED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Learn more about Gemini API quotas\",\n            \"url\": \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.QuotaFailure\",\n        \"violations\": [\n          {\n            \"quotaMetric\": \"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\n            \"quotaId\": \"GenerateRequestsPerMinutePerProjectPerModel-FreeTier\",\n            \"quotaDimensions\": {\n              \"model\": \"gemini-2.5-flash\",\n              \"location\": \"global\"\n            },\n            \"quotaValue\": \"10\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.RetryInfo\",\n        \"retryDelay\": \"22s\"\n      }\n    ]\n  }\n}\n","code":429,"status":"Too Many Requests"}}
-//       at throwErrorIfNotOK (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:11430:30)
-//       at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
-//       at async /var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:11183:13
-//       at async Models.generateContentStream (/var/www/ai-bot/node_modules/@google/genai/dist/node/index.cjs:12572:24) {
-//     status: 429
-//   }
