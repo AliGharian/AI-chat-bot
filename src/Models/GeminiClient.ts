@@ -150,7 +150,7 @@ export class GeminiClient {
         3. The response must be comprehensive, respectful, and fluent in Persian (Farsi).
 
         This is the chat history between the user and the assistant:
-          ${history}
+          ${options.history}
 
         --- CONTEXT_DATA (Knowledge Base) ---
         ${contextText}
