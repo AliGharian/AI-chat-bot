@@ -1,10 +1,6 @@
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
-import { createClient } from "redis";
-import { RedisVectorStore } from "@langchain/redis";
 import { GoogleGenAI } from "@google/genai";
 import weaviate, { WeaviateClient } from "weaviate-ts-client";
 import dotenv from "dotenv";
-import { WeaviateStore } from "@langchain/weaviate";
 import { Document } from "@langchain/core/documents";
 dotenv.config();
 
