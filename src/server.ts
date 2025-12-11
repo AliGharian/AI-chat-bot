@@ -7,9 +7,6 @@ import { GeminiClient } from "./Models/GeminiClient";
 import { UAParser } from "ua-parser-js";
 import {
   buildHistoryPrompt,
-  extractUrl,
-  fetchPageContent,
-  stripHtml,
 } from "./utils";
 import { generateResponseWithRAG } from "./embedding/rag";
 dotenv.config();

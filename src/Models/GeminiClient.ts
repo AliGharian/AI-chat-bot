@@ -51,7 +51,6 @@ async function runSimilaritySearch(
       .withFields("content _additional { id distance }")
       .withNearText({
         concepts: [userQuery],
-        distance: 0.35,
       })
       .withLimit(k)
       .do();
