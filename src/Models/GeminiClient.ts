@@ -4,78 +4,15 @@ import {
   ContentListUnion,
   GenerateContentConfig,
 } from "@google/genai";
-import { getAssetPrice, getForexEconomicNews, scrapePage } from "../utils";
+import {
+  formatContext,
+  getAssetPrice,
+  getForexEconomicNews,
+  runSimilaritySearch,
+  scrapePage,
+} from "../utils";
 import { SYSTEM_INSTRUCTION } from "./systemInstruction";
 import { FUNCTION_DECLARATION } from "./functionDeclaration";
-import { Document } from "langchain";
-import weaviate, { WeaviateClient } from "weaviate-ts-client";
-import dotenv from "dotenv";
-dotenv.config();
-
-/* ---------- Weaviate Configuration ---------- */
-const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
-const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
-
-/* ---------- Helper Functions for RAG ---------- */
-function formatContext(documents: Document[]): string {
-  const context = documents
-    .map((doc) => {
-      return `${doc.pageContent}\n---`;
-    })
-    .join("\n");
-  return context.trim();
-}
-
-export async function runSimilaritySearch(
-  userQuery: string,
-  k: number = 10
-): Promise<Document[]> {
-  //! Define Weaviate client
-  const weaviateClient: WeaviateClient = weaviate.client({
-    scheme: "http",
-    host: WEAVIATE_HOST,
-  });
-
-  const isReady = await weaviateClient.misc.readyChecker().do();
-  if (!isReady) {
-    console.error("❌ Weaviate is not ready. Cannot perform search.");
-    return [];
-  }
-  console.log(
-    "✅ Connected to Weaviate for search. Using native GraphQL search."
-  );
-  //? -------------------------------------------
-
-  console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
-
-  const graphqlQuery = await weaviateClient.graphql
-    .get()
-    .withClassName(WEAVIATE_CLASS_NAME)
-    .withFields("content _additional { id distance }")
-    .withNearText({
-      concepts: [userQuery],
-    })
-    .withLimit(k)
-    .do();
-
-  const results: any[] = graphqlQuery.data.Get?.[WEAVIATE_CLASS_NAME] || [];
-
-  console.log("\n\nGraphQL Search Results:\n", results);
-
-  const relevantDocuments: Document[] = results.map((item, index) => {
-    // Create Document
-    const doc = new Document({
-      pageContent: item.content,
-      metadata: {
-        id: item._additional.id,
-        distance: item._additional.distance,
-      },
-    });
-    return doc;
-  });
-
-  return relevantDocuments;
-}
 
 /* ---------- TYPES ---------- */
 interface GenerateOptions {
@@ -118,6 +55,15 @@ export class GeminiClient {
       return await getForexEconomicNews(args);
     }
 
+    if (name === "searchKnowledgeBase") {
+      const documents = await runSimilaritySearch(args.query, args.k);
+      const contextString = formatContext(documents);
+      if (!contextString) {
+        return "No relevant documents found in the knowledge base. Try to answer the user query based on common knowledge.";
+      }
+      return contextString;
+    }
+
     throw new Error("Unknown action: " + name);
   }
 
@@ -143,14 +89,15 @@ export class GeminiClient {
     const relevantDocuments = await runSimilaritySearch(userQuery, 5);
     const context = formatContext(relevantDocuments);
     console.log("Context text is: ", context);
-    const ragPrompt: string = `
+    const initialPrompt: string = `
         Instructions:
-        1. Only use Function Call tools if the required answer is NOT available in the 'CONTEXT_DATA' provided below.
-        2. Answer the 'USER_QUERY' strictly based on the 'CONTEXT_DATA' and the chat history (if relevant).
-        3. The response must be comprehensive, respectful, and fluent in Persian (Farsi).
-
-         --- CONTEXT_DATA (Knowledge Base) ---
-        ${context}
+        1. [RAG Focus] Use the available 'searchKnowledgeBase' function ONLY if the USER_QUERY is specific and requires retrieving information from the internal knowledge base (e.g., technical guides, broker details, specific financial strategies).
+        
+        2. [Tool Action] When calling 'searchKnowledgeBase', **ALWAYS ensure the 'query' parameter is a self-contained, high-quality, and complete statement that combines the current 'USER_QUERY' and the 'chat history' context.** The query should be formatted like a blog post title for better semantic matching.
+        
+        3. [Other Tools] If the answer is common knowledge or requires external data (like news or price), use the other available tools.
+        4. If no tool is required, answer directly.
+        5. The final response must be comprehensive, respectful, and fluent in Persian (Farsi).
 
         Current Page URL: "${pageUrl ?? ""}"
 
@@ -161,25 +108,25 @@ export class GeminiClient {
         ${userQuery}
     `;
 
-    const firstContent: ContentListUnion = [
+    const contents: ContentListUnion = [
       {
         role: "user",
         parts: [
           {
-            text: ragPrompt,
+            text: initialPrompt,
           },
         ],
       },
     ];
 
-    console.log("First content is: ", JSON.stringify(firstContent));
+    console.log("First content is: ", JSON.stringify(contents));
 
     try {
       /* ---------- First Step Call the Model ---------- */
       const response = await this.client.models.generateContent({
         model,
         config,
-        contents: firstContent,
+        contents,
       });
 
       console.log("First AI response: ", response);
@@ -211,7 +158,7 @@ export class GeminiClient {
         // --- FIX IS HERE ---
 
         const followupContents: ContentListUnion = [
-          ...firstContent,
+          ...contents,
           {
             role: "model",
             parts: [

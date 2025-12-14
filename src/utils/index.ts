@@ -1,5 +1,9 @@
 import axios from "axios";
 import { IMessage } from "../types";
+import { Document } from "langchain";
+import weaviate, { WeaviateClient } from "weaviate-ts-client";
+import dotenv from "dotenv";
+dotenv.config();
 
 export function extractUrl(text: string): string | null {
   const regex = /(https?:\/\/[^\s]+)/g;
@@ -212,6 +216,72 @@ export function extractRawText(contentBlocks: any): string {
   }
 
   return rawText.trim();
+}
+
+
+/* ---------- Weaviate Configuration ---------- */
+const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
+const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
+
+/* ---------- Helper Functions for RAG ---------- */
+export function formatContext(documents: Document[]): string {
+  const context = documents
+    .map((doc) => {
+      return `${doc.pageContent}\n---`;
+    })
+    .join("\n");
+  return context.trim();
+}
+
+export async function runSimilaritySearch(
+  userQuery: string,
+  k: number = 10
+): Promise<Document[]> {
+  //! Define Weaviate client
+  const weaviateClient: WeaviateClient = weaviate.client({
+    scheme: "http",
+    host: WEAVIATE_HOST,
+  });
+
+  const isReady = await weaviateClient.misc.readyChecker().do();
+  if (!isReady) {
+    console.error("❌ Weaviate is not ready. Cannot perform search.");
+    return [];
+  }
+  console.log(
+    "✅ Connected to Weaviate for search. Using native GraphQL search."
+  );
+  //? -------------------------------------------
+
+  console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
+
+  const graphqlQuery = await weaviateClient.graphql
+    .get()
+    .withClassName(WEAVIATE_CLASS_NAME)
+    .withFields("content _additional { id distance }")
+    .withNearText({
+      concepts: [userQuery],
+    })
+    .withLimit(k)
+    .do();
+
+  const results: any[] = graphqlQuery.data.Get?.[WEAVIATE_CLASS_NAME] || [];
+
+  console.log("\n\nGraphQL Search Results:\n", results);
+
+  const relevantDocuments: Document[] = results.map((item, index) => {
+    // Create Document
+    const doc = new Document({
+      pageContent: item.content,
+      metadata: {
+        id: item._additional.id,
+        distance: item._additional.distance,
+      },
+    });
+    return doc;
+  });
+
+  return relevantDocuments;
 }
 
 

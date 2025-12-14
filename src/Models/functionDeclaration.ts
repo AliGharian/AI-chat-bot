@@ -54,5 +54,25 @@ export const FUNCTION_DECLARATION: FunctionDeclaration[] = [
       required: ["startDate", "endDate"],
     },
   },
+  {
+    name: "searchKnowledgeBase",
+    description:
+      "Searches the internal knowledge base for specific, detailed information on financial topics, brokers, or technical guides.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        query: {
+          type: Type.STRING,
+          description:
+            "CRITICAL: Generate a complete, standalone, and article-like query for vector search. This query MUST combine the 'USER_QUERY' and the 'chat history' context to ensure accuracy. The output query must be phrased as if it were a title or topic of a blog post (e.g., 'A detailed guide on removing indicators from the TradingView chart').",
+        },
+        k: {
+          type: Type.INTEGER,
+          description: "Number of documents to retrieve (default is 5).",
+        },
+      },
+      required: ["query"],
+    },
+  },
   // add more actions
 ];
