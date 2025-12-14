@@ -221,7 +221,7 @@ export function extractRawText(contentBlocks: any): string {
 
 /* ---------- Weaviate Configuration ---------- */
 const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
-const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
+const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "";
 
 /* ---------- Helper Functions for RAG ---------- */
 export function formatContext(documents: Document[]): string {
@@ -258,7 +258,7 @@ export async function runSimilaritySearch(
   const graphqlQuery = await weaviateClient.graphql
     .get()
     .withClassName(WEAVIATE_CLASS_NAME)
-    .withFields("content _additional { id distance }")
+    .withFields("content title metaTitle metaDescription _additional { id distance }")
     .withNearText({
       concepts: [userQuery],
     })
