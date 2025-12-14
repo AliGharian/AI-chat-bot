@@ -86,9 +86,6 @@ export class GeminiClient {
       maxOutputTokens: options.maxOutputTokens,
     };
 
-    const relevantDocuments = await runSimilaritySearch(userQuery, 5);
-    const context = formatContext(relevantDocuments);
-    console.log("Context text is: ", context);
     const initialPrompt: string = `
         Instructions:
         1. [RAG Focus] Use the available 'searchKnowledgeBase' function ONLY if the USER_QUERY is specific and requires retrieving information from the internal knowledge base (e.g., technical guides, broker details, specific financial strategies).
