@@ -40,9 +40,13 @@ async function indexBlogPosts() {
     return new Document({
       pageContent: cleanedContent,
       metadata: {
-        id: post._id.toString(),
+        id: post._id,
         title: post.title,
+        featureImage: post.featuredImageUrl,
+        type: "BLOG",
         slug: post.slug,
+        metaTitle: post.metaTitle,
+        metaDescription: post.metaDescription,
       },
     });
   });
@@ -83,8 +87,13 @@ async function indexBlogPosts() {
         const doc = batch[j];
         const dataObject = {
           content: doc.pageContent,
-          sourceKey: doc.metadata.sourceKey,
-          metadataJson: doc.metadata.metadataJson,
+          blog_id: doc.metadata.id,
+          title: doc.metadata.title,
+          featureImage: doc.metadata.featureImage,
+          type: doc.metadata.type,
+          slug: doc.metadata.slug,
+          metaTitle: doc.metadata.metaTitle,
+          metaDescription: doc.metadata.metaDescription,
         };
 
         batcher.withObject({
