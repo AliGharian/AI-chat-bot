@@ -253,7 +253,7 @@ export async function runSimilaritySearch(
   );
   //? -------------------------------------------
 
-  console.log(`Searching Weaviate for documents similar to: "${userQuery}"...`);
+  console.log(`Searching Weaviate for documents of ${WEAVIATE_CLASS_NAME} similar to: "${userQuery}"...`);
 
   const graphqlQuery = await weaviateClient.graphql
     .get()
