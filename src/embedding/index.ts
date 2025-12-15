@@ -8,7 +8,8 @@ dotenv.config();
 
 const API_KEYS = JSON.parse(process.env.GOOGLE_GENAI_API_KEYS ?? "[]");
 const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
-const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "DocumentChunk";
+// const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "SafeBrokers";
+const WEAVIATE_CLASS_NAME = "SafeBrokers";
 const BATCH_SIZE = 90;
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "";
 
@@ -41,10 +42,16 @@ async function indexBlogPosts() {
       pageContent: cleanedContent,
       metadata: {
         id: post._id,
-        title: post.title,
-        featureImage: post.featuredImageUrl,
-        type: "BLOG",
+        type: "BROKER",
         slug: post.slug,
+        name: post.name,
+        nameEn: post.nameEn,
+        featureImage: post.featuredImageUrl,
+        address: post.address,
+        email: post.email,
+        phoneNumber: post.phoneNumber,
+        websiteUrl: post.websiteUrl,
+        about: post.about,
         metaTitle: post.metaTitle,
         metaDescription: post.metaDescription,
       },
@@ -87,11 +94,17 @@ async function indexBlogPosts() {
         const doc = batch[j];
         const dataObject = {
           content: doc.pageContent,
-          blog_id: doc.metadata.id,
-          title: doc.metadata.title,
-          featureImage: doc.metadata.featureImage,
+          broker_id: doc.metadata.id,
           type: doc.metadata.type,
           slug: doc.metadata.slug,
+          name: doc.metadata.name,
+          nameEn: doc.metadata.nameEn,
+          address: doc.metadata.address,
+          email: doc.metadata.email,
+          phoneNumber: doc.metadata.phoneNumber,
+          websiteUrl: doc.metadata.websiteUrl,
+          featureImage: doc.metadata.featureImage,
+          about: doc.metadata.about,
           metaTitle: doc.metadata.metaTitle,
           metaDescription: doc.metadata.metaDescription,
         };
