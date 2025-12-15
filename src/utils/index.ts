@@ -180,8 +180,10 @@ export function extractRawText(contentBlocks: any): string {
   let rawText = "";
   // console.log("Content block is: ", contentBlocks)
 
-  if (!contentBlocks.startsWith("{") || !contentBlocks.startsWith("[")) {
-    console.log("inCorrect content is: ", contentBlocks);
+  if (contentBlocks.startsWith("{") || contentBlocks.startsWith("[")) {
+    // console.log("Correct content is: ", contentBlocks);
+  }else {
+    console.log("InCorrect content is: ", contentBlocks);
   }
   const blocks: any[] = JSON.parse(contentBlocks);
   for (const block of blocks) {
