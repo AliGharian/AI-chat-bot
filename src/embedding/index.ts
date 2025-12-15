@@ -92,6 +92,7 @@ async function indexBlogPosts() {
 
       for (let j = 0; j < batch.length; j++) {
         const doc = batch[j];
+        console.log("Doc is: ", doc);
         const dataObject = {
           content: doc.pageContent,
           broker_id: doc.metadata.id,
