@@ -180,7 +180,10 @@ export function extractRawText(contentBlocks: any): string {
   let rawText = "";
   // console.log("Content block is: ", contentBlocks)
 
-  const blocks: any[] = JSON.parse(JSON.stringify(contentBlocks));
+  if (!contentBlocks.startsWith("{") || !contentBlocks.startsWith("[")) {
+    console.log("inCorrect content is: ", contentBlocks);
+  }
+  const blocks: any[] = JSON.parse(contentBlocks);
   for (const block of blocks) {
     // Skip non-textual blocks like images and custom components (CTAs).
     if (["image", "target"].includes(block.type)) {
@@ -219,7 +222,6 @@ export function extractRawText(contentBlocks: any): string {
   return rawText.trim();
 }
 
-
 /* ---------- Weaviate Configuration ---------- */
 const WEAVIATE_HOST = `${process.env.HOST}:${process.env.WEAVIATE_PORT}`;
 const WEAVIATE_CLASS_NAME = process.env.WEAVIATE_CLASS_NAME || "";
@@ -254,12 +256,16 @@ export async function runSimilaritySearch(
   );
   //? -------------------------------------------
 
-  console.log(`Searching Weaviate for documents of ${WEAVIATE_CLASS_NAME} similar to: "${userQuery}"...`);
+  console.log(
+    `Searching Weaviate for documents of ${WEAVIATE_CLASS_NAME} similar to: "${userQuery}"...`
+  );
 
   const graphqlQuery = await weaviateClient.graphql
     .get()
     .withClassName(WEAVIATE_CLASS_NAME)
-    .withFields("content title metaTitle metaDescription _additional { id distance }")
+    .withFields(
+      "content title metaTitle metaDescription _additional { id distance }"
+    )
     .withNearText({
       concepts: [userQuery],
     })
@@ -284,7 +290,6 @@ export async function runSimilaritySearch(
 
   return relevantDocuments;
 }
-
 
 export function chunkArray<T>(arr: T[], size: number): T[][] {
   const result: T[][] = [];
