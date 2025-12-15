@@ -180,7 +180,7 @@ export function extractRawText(contentBlocks: any): string {
   let rawText = "";
   // console.log("Content block is: ", contentBlocks)
 
-  const blocks: any[] = JSON.parse(contentBlocks);
+  const blocks: any[] = JSON.parse(JSON.stringify(contentBlocks));
   for (const block of blocks) {
     // Skip non-textual blocks like images and custom components (CTAs).
     if (["image", "target"].includes(block.type)) {
