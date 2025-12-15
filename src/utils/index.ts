@@ -180,6 +180,11 @@ export function extractRawText(contentBlocks: any): string {
   let rawText = "";
   // console.log("Content block is: ", contentBlocks)
 
+  if (typeof contentBlocks !== 'string') {
+      console.error("❌ Error: contentBlocks must be a string (JSON stringified array). Received type:", typeof contentBlocks);
+      return "";
+  }
+
   if (contentBlocks.startsWith("{") || contentBlocks.startsWith("[")) {
     // console.log("Correct content is: ", contentBlocks);
   }else {
