@@ -178,7 +178,7 @@ export function extractTextFromChildren(children: any[]): string {
 
 export function extractRawText(contentBlocks: any): string {
   let rawText = "";
-  console.log("Content block is: ", contentBlocks)
+  // console.log("Content block is: ", contentBlocks)
 
   const blocks: any[] = JSON.parse(contentBlocks);
   for (const block of blocks) {
